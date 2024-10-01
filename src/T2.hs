@@ -110,27 +110,13 @@ tt :: MKey (At () '[]) '[]
 tt = I.do
   At k1 <- newkey "k1"
   At k2 <- newkey "k2"
-  At k3 <- newkey "k3"
-  liftm $ print (k1, k2, k3)
-
   updatekey k1 k2
-  At k1v <- readkey k1
-  liftm $ print k1v
-
-  updatekey k1v k3
+  updatekey k2 k1
+  -- freekey k1
   At k2v <- readkey k2
   liftm $ print k2v
-
-  updatekey k2 k1
-  updatekey k1 k3
-  updatekey k3 k2
-  At k3v <- readkey k3
-  liftm $ print k3v
-
-  updatekey k2 k1
   freekey k1
   freekey k2
-  freekey k3
 
 runtt :: IO ()
 runtt = runMyKey tt
