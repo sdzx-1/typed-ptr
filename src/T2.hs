@@ -94,6 +94,7 @@ updatekey s v = UpdateKey s v (returnAt ())
 
 type family LookupI (s :: k) (i :: [k :-> Maybe v]) :: v where
   LookupI k '[] = TypeError (Text "can't get key: " :<>: ShowType k)
+  LookupI k ((k ':-> Nothing) ': _) = TypeError (Text "can't get val of key: " :<>: ShowType k)
   LookupI k ((k ':-> Just a) ': _) = a
   LookupI k (_ ': b) = LookupI k b
 
@@ -110,13 +111,16 @@ tt :: MKey (At () '[]) '[]
 tt = I.do
   At k1 <- newkey "k1"
   At k2 <- newkey "k2"
+  At k3 <- newkey "k3"
+  liftm $ print (k1, k2, k3)
   updatekey k1 k2
   updatekey k2 k1
-  -- freekey k1
+  freekey k3
   At k2v <- readkey k2
   liftm $ print k2v
   freekey k1
   freekey k2
+
 
 runtt :: IO ()
 runtt = runMyKey tt
