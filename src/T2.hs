@@ -2,6 +2,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE QualifiedDo #-}
@@ -23,7 +24,59 @@ import Data.Type.Map
 import Data.Void
 import Foreign (Ptr, Storable (..), castPtr)
 import Foreign.Marshal.Alloc
+import GHC.Records
 import GHC.TypeLits
+
+data KVal = KType Type | KKey (Maybe Symbol)
+
+data MyVal (s :: KVal) where
+  MyVal :: a -> MyVal (KType a)
+  MyNullVal :: MyVal (KKey Nothing)
+  MyMMP :: MMP s -> MyVal (KKey (Just s))
+
+data Struct :: [KVal] -> Type where
+  End :: Struct '[]
+  Cons :: MyVal a -> Struct as -> Struct (a ': as)
+
+ks :: Struct [KType Bool, KType String]
+ks = Cons (MyVal True) (Cons (MyVal "nice") End)
+
+instance HasField "v0" (Struct (x ': xs)) (MyVal x) where
+  getField (Cons x _) = x
+
+instance HasField "v1" (Struct (a ': x ': xs)) (MyVal x) where
+  getField (Cons _ (Cons x _)) = x
+
+instance HasField "v2" (Struct (a ': b ': x ': xs)) (MyVal x) where
+  getField (Cons _ (Cons _ (Cons x _))) = x
+
+instance HasField "v3" (Struct (a ': b ': c ': x ': xs)) (MyVal x) where
+  getField (Cons _ (Cons _ (Cons _ (Cons x _)))) = x
+
+ppp = ks.v1
+
+-- data GJK = GJK
+--   { ksss :: Int
+--   }
+
+-- p :: Int
+-- p = (GJK 10).f1
+
+{-
+
+ptr -> [100, True, Sring, Just ptr1]
+        0     1     2      3
+ptr1 -> [3]
+
+ptr.0 .= 20
+ptr.1 .= False
+-- (ptr %  3) % 0 .= 100
+ref <- readKey ptr.3
+ref .= 100
+
+-}
+
+-------------------------------
 
 type DM = Map Symbol (Maybe Symbol)
 
@@ -120,7 +173,6 @@ tt = I.do
   liftm $ print k2v
   freekey k1
   freekey k2
-
 
 runtt :: IO ()
 runtt = runMyKey tt
