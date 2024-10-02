@@ -76,6 +76,7 @@ type family Insert (s :: k) (t :: v) (i :: Map k v) :: Map k v where
     If ( k :< l )
       ( (k ':-> v) ': (l ':-> a) ': b )
       ( (l ':-> a) ': Insert k v b )
+  -- Insert k v m = ( k ':-> v ) ': m
 
 -- | Insert a key/value pair in an already-sorted map.
 --

@@ -1,7 +1,11 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE PolyKinds #-}
@@ -12,7 +16,9 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# OPTIONS_GHC -Wno-missing-signatures #-}
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
+{-# OPTIONS_GHC -Wno-unused-foralls #-}
 
 module T2 where
 
@@ -22,7 +28,7 @@ import Data.Kind
 import Data.Proxy
 import Data.Type.Map
 import Data.Void
-import Foreign (Ptr, Storable (..), castPtr)
+import Foreign (Ptr, Storable (..), castPtr, plusPtr)
 import Foreign.Marshal.Alloc
 import GHC.Records
 import GHC.TypeLits
@@ -38,29 +44,22 @@ data Struct :: [KVal] -> Type where
   End :: Struct '[]
   Cons :: MyVal a -> Struct as -> Struct (a ': as)
 
-ks :: Struct [KType Bool, KType String]
-ks = Cons (MyVal True) (Cons (MyVal "nice") End)
+-- data PtrStruct (s :: [KVal]) = forall a. PtrStruct (Ptr a)
 
-instance HasField "v0" (Struct (x ': xs)) (MyVal x) where
-  getField (Cons x _) = x
+-- instance HasField "v0" (PtrStruct ((KType x) ': xs)) (Ptr x) where
+--   getField (PtrStruct ptr) = castPtr ptr
 
-instance HasField "v1" (Struct (a ': x ': xs)) (MyVal x) where
-  getField (Cons _ (Cons x _)) = x
+-- instance HasField "v1" (PtrStruct (a ': (KType x) ': xs)) (Ptr x) where
+--   getField (PtrStruct ptr) = castPtr (ptr `plusPtr` 8)
 
-instance HasField "v2" (Struct (a ': b ': x ': xs)) (MyVal x) where
-  getField (Cons _ (Cons _ (Cons x _))) = x
+-- instance HasField "v2" (PtrStruct (a ': b ': (KType x) ': xs)) (Ptr x) where
+--   getField (PtrStruct ptr) = castPtr (ptr `plusPtr` 16)
 
-instance HasField "v3" (Struct (a ': b ': c ': x ': xs)) (MyVal x) where
-  getField (Cons _ (Cons _ (Cons _ (Cons x _)))) = x
+-- ks :: Struct [KType Double, KType Double]
+-- ks = Cons (MyVal 1) (Cons (MyVal 2) End)
 
-ppp = ks.v1
-
--- data GJK = GJK
---   { ksss :: Int
---   }
-
--- p :: Int
--- p = (GJK 10).f1
+-- ps :: PtrStruct [KType Double, KType Double]
+-- ps = undefined
 
 {-
 
@@ -101,7 +100,7 @@ data MKey (ia :: DM -> Type) (b :: DM) where
   NewKey :: Proxy (s :: Symbol) -> (At (MMP s) (Insert s Nothing dm) ~> MKey ia) -> MKey ia dm
   UpdateKey :: MMP s -> MMP v -> MKey ia (InsertOverwriting s (Just v) dm) -> MKey ia dm
   FreeKey :: MMP s -> MKey ia (DeleteVal s (Delete s dm)) -> MKey ia dm
-  LiftM :: IO (MKey ia dm) -> MKey ia dm
+  LiftM :: IO (MKey ia dm') -> MKey ia dm
 
 runMyKey :: MKey (At a dmi) dms -> IO a
 runMyKey = \case
@@ -176,3 +175,8 @@ tt = I.do
 
 runtt :: IO ()
 runtt = runMyKey tt
+
+foo :: Int -> forall (s :: [Symbol]) -> Int
+foo _ _ss = undefined
+
+kkk = foo 10 ["nice", "help", "gk"]
