@@ -59,6 +59,7 @@ library
 
     -- Modules exported by the library.
     exposed-modules: T2 
+                   ,  T3
                    ,  Data.Type.LazyEquality
                    ,  Data.Type.Map
                    ,  Data.Type.POrd
