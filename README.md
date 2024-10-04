@@ -1,2 +1,2 @@
 # typed-ptr
-Trying to track a sea of ​​ptr on a type
+Trying to track a sea of ​​ptr on the type
