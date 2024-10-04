@@ -13,6 +13,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -Wno-missing-signatures #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
 {-# OPTIONS_GHC -Wno-unused-foralls #-}
 {-# OPTIONS_GHC -Wno-unused-local-binds #-}
@@ -20,11 +22,11 @@
 
 module T3 where
 
-import Data.IFunctor (At (..), IFunctor (..), IMonad (..), returnAt, type (~>))
+import Data.IFunctor (At (..), IFunctor (..), IMonad (..), IMonadFail (..), returnAt, type (~>))
 import qualified Data.IFunctor as I
 import Data.Kind
 import Data.Proxy
-import Data.Type.Map (Insert, Lookup, Map)
+import Data.Type.Map (Insert, InsertOverwriting, Lookup, Map)
 import Data.Void
 import Foreign
 import GHC.TypeLits
@@ -106,6 +108,9 @@ instance IMonad MKey where
     NewKey sym st cont -> NewKey sym st (ibind f . cont)
     LiftM imk -> LiftM (fmap (ibind f) imk)
 
+instance IMonadFail MKey where
+  fail = error "np"
+
 runMKey :: MKey (At a dmi) dms -> IO a
 runMKey = \case
   MReturn (At a) -> pure a
@@ -153,25 +158,76 @@ readkey (MMP ptr) _ = LiftM $ do
     1 -> pure $ returnAt $ unsafeCoerce $ (MyVal v1)
     _ -> error "np"
 
+type family UpdateIndex (s :: Symbol) (n :: Nat) (vals :: [KVal]) :: [KVal] where
+  UpdateIndex s 0 (x ': xs) = KKey (Just s) ': xs
+  UpdateIndex s n (x ': xs) = x ': UpdateIndex s (n - 1) xs
+
+type family PokeVal (val' :: KVal) (val :: KVal) (n :: Nat) (vals :: [KVal]) :: (Type, [KVal]) where
+  PokeVal (KType a) (KType a) n vals = '(a, vals)
+  PokeVal (KKey _) (KKey (Just s)) n vals = '(Ptr Void, UpdateIndex s n vals)
+
+writekeyField
+  :: forall n s dm val' decVal val vals vals'
+   . ( Just vals ~ Lookup s dm
+     , val' ~ Index n vals
+     , '(decVal, vals') ~ PokeVal val' val n vals
+     , Storable decVal
+     , KnownNat n
+     )
+  => MMP s -> Proxy n -> MyVal val -> MKey (At () (InsertOverwriting s vals' dm)) dm
+writekeyField (MMP ptr) _ myVal = LiftM $ do
+  let nval = natVal @n Proxy
+  case myVal of
+    MyVal a -> do
+      poke @decVal (castPtr (ptr `plusPtr` (fromIntegral nval * 8))) (unsafeCoerce a)
+      pure (returnAt ())
+    MyMMP (MMP ptr) -> do
+      poke (castPtr (ptr `plusPtr` (fromIntegral nval * 8))) ptr
+      pure (returnAt ())
+    _ -> pure (returnAt ())
+
 tt :: MKey (At () '[]) '[]
 tt = I.do
   At k1 <-
     newkey
       "k1"
       ( Cons
-          (MyVal (10086 :: Double))
+          (MyVal (100 :: Double))
           ( Cons
               (MyVal (10087 :: Double))
               (Cons MyNullPtr End)
           )
       )
+
+  At k2 <-
+    newkey
+      "k2"
+      ( ( Cons
+            (MyVal (3.14 :: Double))
+            (Cons MyNullPtr End)
+        )
+      )
+
+  liftm $ print (("k1", k1), ("k2", k2))
+  writekeyField k1 (Proxy @0) $ MyVal @Double 99
+  writekeyField k1 (Proxy @2) $ MyMMP k2
+  writekeyField k2 (Proxy @1) $ MyMMP k2
+
   At mv <- readkey k1 (Proxy @0)
   liftm $ print mv
-
   At mv <- readkey k1 (Proxy @1)
   liftm $ print mv
-
   At mv <- readkey k1 (Proxy @2)
+  liftm $ print mv
+  At mv <- readkey k2 (Proxy @0)
+  liftm $ print mv
+  At mv <- readkey k2 (Proxy @1)
+  liftm $ print mv
+
+  At (MyMMP mmp ) <- readkey k2 (Proxy @1)
+
+  writekeyField mmp (Proxy @0) (MyVal @Double 4.13)
+  At mv <- readkey k2 (Proxy @0)
   liftm $ print mv
   undefined
 
