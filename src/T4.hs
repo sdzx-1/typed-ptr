@@ -165,12 +165,10 @@ pokeptrf vps n val = PokePtrField vps (Proxy @n) val (returnAt ())
 
 foo :: MPtr (At () '[]) '[]
 foo = I.do
-  At k1 <- newptr "k1" (True :& (1 :: Int) :& NullPtrC :& End)
+  At k1 <- newptr "k1" (True :& "st" :& NullPtrC :& End)
   At k2 <- newptr "k2" (True :& (1 :: Double) :& End)
   At v <- peekptr k1
   At v1 <- peekptrf k1 2
-  pokeptrf k1 0 False
-  -- pokeptrf k1 1 False
-  -- pokeptrf k1 2 False
-  -- pokeptrf k1 3 False
+  pokeptrf k1 2 k2 
+  pokeptrf k1 2 k2 
   undefined
