@@ -67,11 +67,6 @@ type family
   Index 0 '[] = TypeError (Text "Too big index: " :<>: ShowType 0)
   Index n (x ': xs) = Index (n - 1) xs
 
-type family PokePtrMV (s :: Symbol) (vs :: Maybe [Type]) :: [Type] where
-  PokePtrMV s Nothing =
-    TypeError (Text "Can't find symbol: " :<>: ShowType s)
-  PokePtrMV s (Just ls) = '[]
-
 data MPtr (ia :: DM -> Type) (b :: DM) where
   MReturn :: ia c -> MPtr ia c
   NewPtr
