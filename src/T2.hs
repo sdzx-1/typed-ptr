@@ -163,7 +163,7 @@ tt :: MKey (At () '[]) '[]
 tt = I.do
   At k1 <- newkey "k1"
   At k2 <- newkey "k2"
-  liftm $ print (k1, k2, k3)
+  liftm $ print (k1, k2)
   updatekey k1 k2
   updatekey k2 k1
   At k2v <- readkey k2
