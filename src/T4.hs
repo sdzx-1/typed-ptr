@@ -9,6 +9,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS_GHC -Wno-unused-imports #-}
 {-# OPTIONS_GHC -Wno-unused-matches #-}
 
@@ -60,9 +61,8 @@ type family
     (vs :: Maybe [Type])
     :: [Type]
   where
-  RMaybe s Nothing =
-    TypeError (Text "Can't find symbol: " :<>: ShowType s)
-  RMaybe _ (Just ls) = ls
+  RMaybe s (Just ls) = ls
+  RMaybe s Nothing = TypeError (Text "Can't find symbol: " :<>: ShowType s)
 
 type family
   Index
@@ -70,21 +70,21 @@ type family
     (ts :: [Type])
     :: Type
   where
-  Index 0 '[] = TypeError (Text "Too big index: " :<>: ShowType 0)
+  Index n '[] = TypeError (Text "Too big index")
   Index 0 (x ': _) = x
   Index n (x ': xs) = Index (n - 1) xs
 
 type family UpdateIndex (n :: Nat) (v :: Type) (ts :: [Type]) :: [Type] where
-  UpdateIndex 0 _ '[] = TypeError (Text "Too big index: " :<>: ShowType 0)
+  UpdateIndex n _ '[] = TypeError (Text "Too big index")
   UpdateIndex 0 a (x ': xs) = a ': xs
   UpdateIndex n a (x ': xs) = x ': UpdateIndex (n - 1) a xs
 
 type family PokePF (n :: Nat) (val' :: Type) (val :: Type) (ts :: [Type]) :: [Type] where
-  PokePF _ NullPtr NullPtr dm = dm
-  PokePF n NullPtr (ValPtr s) dm = UpdateIndex n (ValPtr s) dm
-  PokePF n (ValPtr s) NullPtr dm = UpdateIndex n NullPtr dm
-  PokePF n (ValPtr s) (ValPtr s1) dm = UpdateIndex n (ValPtr s1) dm
-  PokePF n a a dm = dm
+  -- PokePF _ NullPtr NullPtr dm = dm
+  -- PokePF n NullPtr (ValPtr s) dm = UpdateIndex n (ValPtr s) dm
+  -- PokePF n (ValPtr _) NullPtr dm = UpdateIndex n NullPtr dm
+  -- PokePF n (ValPtr _) (ValPtr s1) dm = UpdateIndex n (ValPtr s1) dm
+  -- PokePF n a a dm = dm
   PokePF _ a b _ =
     TypeError
       ( Text "Poke type error: "
@@ -97,8 +97,7 @@ type family PokePF (n :: Nat) (val' :: Type) (val :: Type) (ts :: [Type]) :: [Ty
 data MPtr (ia :: DM -> Type) (b :: DM) where
   MReturn :: ia c -> MPtr ia c
   NewPtr
-    :: (Nothing ~ Lookup s dm)
-    => Proxy (s :: Symbol)
+    :: Proxy (s :: Symbol)
     -> Struct ts
     -> (At (ValPtr s) (Insert s ts dm) ~> MPtr ia)
     -> MPtr ia dm
@@ -112,13 +111,21 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
     -> (At (Index n (RMaybe s (Lookup s dm))) dm ~> MPtr ia)
     -> MPtr ia dm
   PokePtrField
-    :: ( ts ~ (RMaybe s (Lookup s dm))
-       , newts ~ PokePF n (Index n ts) val ts
-       )
-    => ValPtr s
+    :: ValPtr s
     -> Proxy (n :: Nat)
     -> val
-    -> MPtr ia (InsertOverwriting s newts dm)
+    -> MPtr
+        ia
+        ( InsertOverwriting
+            s
+            ( PokePF
+                n
+                (Index n (RMaybe s (Lookup s dm)))
+                val
+                (RMaybe s (Lookup s dm))
+            )
+            dm
+        )
     -> MPtr ia dm
   LiftM :: IO (MPtr ia dm) -> MPtr ia dm
 
@@ -155,20 +162,41 @@ peekptrf
 peekptrf vps n = PeekPtrField vps (Proxy @n) ireturn
 
 pokeptrf
-  :: ValPtr s
-  -> forall (n :: Nat)
-    ->( ts ~ (RMaybe s (Lookup s dm))
-      , newts ~ PokePF n (Index n ts) val ts
+  :: forall (n :: Nat) s val dm
+   . ValPtr s
+  -> Proxy (n)
+  -> val
+  -> MPtr
+      ( At
+          ()
+          ( InsertOverwriting
+              s
+              ( PokePF
+                  n
+                  (Index n (RMaybe s (Lookup s dm)))
+                  val
+                  (RMaybe s (Lookup s dm))
+              )
+              dm
+          )
       )
-  => val -> MPtr (At () (InsertOverwriting s newts dm)) dm
-pokeptrf vps n val = PokePtrField vps (Proxy @n) val (returnAt ())
+      dm
+pokeptrf vps n val = PokePtrField vps (n) val (returnAt ())
 
 foo :: MPtr (At () '[]) '[]
 foo = I.do
   At k1 <- newptr "k1" (True :& "st" :& NullPtrC :& End)
   At k2 <- newptr "k2" (True :& (1 :: Double) :& End)
   At v <- peekptr k1
-  At v1 <- peekptrf k1 2
-  pokeptrf k1 2 k2 
-  pokeptrf k1 2 k2 
+  At v1 <- peekptrf k1 1
+  LiftM $ print v1 >> pure (returnAt ())
+  pokeptrf k1 (Proxy @1) k2
+  pokeptrf k1 (Proxy @2) k2
+  pokeptrf k1 (Proxy @2) k2
+  pokeptrf k1 (Proxy @1) k2
+  -- pokeptrf k1 2 "st"
+  -- pokeptrf k1 2 k2
+  -- pokeptrf k1 2 k2
+  -- pokeptrf k1 2 k2
+  -- pokeptrf k1 2 k2
   undefined
