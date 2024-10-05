@@ -9,9 +9,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# OPTIONS_GHC -Wall #-}
-{-# OPTIONS_GHC -Wno-unused-imports #-}
-{-# OPTIONS_GHC -Wno-unused-matches #-}
 
 module T4 where
 
@@ -56,94 +53,67 @@ data Struct :: [Type] -> Type where
   (:&) :: a -> Struct as -> Struct (a ': as)
 
 type family
-  RMaybe
-    (s :: Symbol)
-    (vs :: Maybe [Type])
-    :: [Type]
-  where
-  RMaybe s Nothing = TypeError (Text "Can't find symbol: " :<>: ShowType s)
-  RMaybe s (Just ls) = ls
-
-type family
   Index
     (n :: Nat)
     (ts :: [Type])
     :: Type
   where
-  Index n '[] = TypeError (Text "Too big index")
+  Index _ '[] = TypeError (Text "Too big index")
   Index 0 (x ': _) = x
   Index n (x ': xs) = Index (n - 1) xs
 
 type family UpdateIndex (n :: Nat) (v :: Type) (ts :: [Type]) :: [Type] where
-  UpdateIndex n _ '[] = TypeError (Text "Too big index")
+  UpdateIndex _ _ '[] = TypeError (Text "Too big index")
   UpdateIndex 0 a (x ': xs) = a ': xs
   UpdateIndex n a (x ': xs) = x ': UpdateIndex (n - 1) a xs
 
-type family
-  PokePF
-    (n :: Nat)
-    (val' :: Type)
-    (val :: Type)
-    (ts :: [Type])
-    :: Maybe [Type]
-  where
-  PokePF _ NullPtr NullPtr dm = Just dm
-  PokePF n NullPtr (ValPtr s) dm = Just (UpdateIndex n (ValPtr s) dm)
-  PokePF n (ValPtr _) NullPtr dm = Just (UpdateIndex n NullPtr dm)
-  PokePF n (ValPtr _) (ValPtr s1) dm = Just (UpdateIndex n (ValPtr s1) dm)
-  PokePF n a a dm = Just dm
-  PokePF _ a b _ = Nothing
-
-type family
-  InsertOverwritingWithMaybe
-    (s :: Symbol)
-    (v :: Maybe [Type])
-    (dm :: DM)
-    :: DM
-  where
-  InsertOverwritingWithMaybe s Nothing dm = TypeError (Text "Poke type error")
-  InsertOverwritingWithMaybe s (Just v) dm = InsertOverwriting s v dm
-
--- TypeError
---   ( Text "Poke type error: "
---       :<>: Text "expect: "
---       :<>: ShowType a
---       :<>: Text " actuale: "
---       :<>: ShowType b
---   )
+type family Check (val' :: Type) (val :: Type) :: Constraint where
+  Check NullPtr NullPtr = ()
+  Check NullPtr (ValPtr s) = ()
+  Check (ValPtr s) NullPtr = ()
+  Check (ValPtr s) (ValPtr s) = ()
+  Check (ValPtr s) (ValPtr s1) = ()
+  Check a a = ()
+  Check a b =
+    TypeError
+      ( Text "Poke the error type, E: "
+          :<>: ShowType a
+          :<>: Text " A: "
+          :<>: ShowType b
+      )
 
 data MPtr (ia :: DM -> Type) (b :: DM) where
   MReturn :: ia c -> MPtr ia c
   NewPtr
-    :: Proxy (s :: Symbol)
+    :: (Nothing ~ Lookup s dm)
+    => Proxy (s :: Symbol)
     -> Struct ts
     -> (At (ValPtr s) (Insert s ts dm) ~> MPtr ia)
     -> MPtr ia dm
   PeekPtr
-    :: ValPtr s
-    -> (At (Struct (RMaybe s (Lookup s dm))) dm ~> MPtr ia)
+    :: (Just ts ~ Lookup s dm)
+    => ValPtr s
+    -> (At (Struct ts) dm ~> MPtr ia)
     -> MPtr ia dm
   PeekPtrField
-    :: ValPtr s
+    :: ( Just ts ~ Lookup s dm
+       , val ~ Index n ts
+       )
+    => ValPtr s
     -> Proxy (n :: Nat)
-    -> (At (Index n (RMaybe s (Lookup s dm))) dm ~> MPtr ia)
+    -> (At val dm ~> MPtr ia)
     -> MPtr ia dm
   PokePtrField
-    :: ValPtr s
+    :: ( Just ts ~ Lookup s dm
+       , val' ~ Index n ts
+       , Check val' val
+       , newts ~ UpdateIndex n val ts
+       , newdm ~ InsertOverwriting s newts dm
+       )
+    => ValPtr s
     -> Proxy (n :: Nat)
     -> val
-    -> MPtr
-        ia
-        ( InsertOverwritingWithMaybe
-            s
-            ( PokePF
-                n
-                (Index n (RMaybe s (Lookup s dm)))
-                val
-                (RMaybe s (Lookup s dm))
-            )
-            dm
-        )
+    -> MPtr ia newdm
     -> MPtr ia dm
   LiftM :: IO (MPtr ia dm) -> MPtr ia dm
 
@@ -172,49 +142,50 @@ newptr
   => Struct ts -> MPtr (At (ValPtr s) (Insert s ts dm)) dm
 newptr s st = NewPtr (Proxy @s) st ireturn
 
-peekptr :: ValPtr s -> MPtr (At (Struct (RMaybe s (Lookup s dm))) dm) dm
+peekptr
+  :: (Just ts ~ Lookup s dm)
+  => ValPtr s -> MPtr (At (Struct ts) dm) dm
 peekptr vs = PeekPtr vs ireturn
 
 peekptrf
-  :: ValPtr s -> forall (n :: Nat) -> MPtr (At (Index n (RMaybe s (Lookup s dm))) dm) dm
+  :: ValPtr s
+  -> forall (n :: Nat)
+    ->(Just ts ~ Lookup s dm)
+  => MPtr (At (Index n ts) dm) dm
 peekptrf vps n = PeekPtrField vps (Proxy @n) ireturn
 
 pokeptrf
-  :: forall (n :: Nat) s val dm
-   . ValPtr s
-  -> Proxy (n)
-  -> val
-  -> MPtr
-      ( At
-          ()
-          ( InsertOverwritingWithMaybe
-              s
-              ( PokePF
-                  n
-                  (Index n (RMaybe s (Lookup s dm)))
-                  val
-                  (RMaybe s (Lookup s dm))
-              )
-              dm
-          )
-      )
-      dm
-pokeptrf vps n val = PokePtrField vps (n) val (returnAt ())
+  :: ValPtr s
+  -> forall (n :: Nat)
+    ->val
+  -> ( Just ts ~ Lookup s dm
+     , val' ~ Index n ts
+     , Check val' val
+     , newts ~ UpdateIndex n val ts
+     , newdm ~ InsertOverwriting s newts dm
+     )
+  => MPtr (At () newdm) dm
+pokeptrf vps n val = PokePtrField vps (Proxy @n) val (returnAt ())
 
 foo :: MPtr (At () '[]) '[]
 foo = I.do
-  At k1 <- newptr "k1" (True :& "st" :& NullPtrC :& End)
-  At k2 <- newptr "k2" (True :& (1 :: Double) :& End)
-  At v <- peekptr k1
-  At v1 <- peekptrf k1 1
-  LiftM $ print v1 >> pure (returnAt ())
-  pokeptrf k1 (Proxy @1000) k2
-  pokeptrf k1 (Proxy @1) k2
-  pokeptrf k1 (Proxy @2) k2
-  pokeptrf k1 (Proxy @0) k2
-  -- pokeptrf k1 2 "st"
-  -- pokeptrf k1 2 k2
-  -- pokeptrf k1 2 k2
-  -- pokeptrf k1 2 k2
-  -- pokeptrf k1 2 k2
+  At k1 <- newptr "k1" (True     :& (0 :: Int)    :& NullPtrC :& End)
+  At k2 <- newptr "k2" (NullPtrC :& (1 :: Double) :& End)
+  At k3 <- newptr "k3" (True :& False :& End)
+  pokeptrf k1 0 False
+  pokeptrf k1 1 (10 :: Int)
+  pokeptrf k1 2 k2
+
+  pokeptrf k2 1 (10 :: Double)
+  pokeptrf k2 0 k1
+
+  At v12 <- peekptrf k1 2
+  pokeptrf v12 1 (10 :: Double)
+  pokeptrf v12 0 k1
+
+  pokeptrf k1 2 k3
+  At v12' <- peekptrf k1 2
+  pokeptrf v12' 0 False
+  pokeptrf v12' 1 True
   undefined
+
