@@ -170,7 +170,7 @@ foo :: MPtr (At () '[]) '[]
 foo = I.do
   At k1 <- newptr "k1" (True     :& (0 :: Int)    :& NullPtrC :& End)
   At k2 <- newptr "k2" (NullPtrC :& (1 :: Double) :& End)
-  At k3 <- newptr "k3" (True :& False :& End)
+  At k3 <- newptr "k3" (True     :& False         :& End)
   pokeptrf k1 0 False
   pokeptrf k1 1 (10 :: Int)
   pokeptrf k1 2 k2
