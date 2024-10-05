@@ -61,8 +61,8 @@ type family
     (vs :: Maybe [Type])
     :: [Type]
   where
-  RMaybe s (Just ls) = ls
   RMaybe s Nothing = TypeError (Text "Can't find symbol: " :<>: ShowType s)
+  RMaybe s (Just ls) = ls
 
 type family
   Index
@@ -79,20 +79,38 @@ type family UpdateIndex (n :: Nat) (v :: Type) (ts :: [Type]) :: [Type] where
   UpdateIndex 0 a (x ': xs) = a ': xs
   UpdateIndex n a (x ': xs) = x ': UpdateIndex (n - 1) a xs
 
-type family PokePF (n :: Nat) (val' :: Type) (val :: Type) (ts :: [Type]) :: [Type] where
-  -- PokePF _ NullPtr NullPtr dm = dm
-  -- PokePF n NullPtr (ValPtr s) dm = UpdateIndex n (ValPtr s) dm
-  -- PokePF n (ValPtr _) NullPtr dm = UpdateIndex n NullPtr dm
-  -- PokePF n (ValPtr _) (ValPtr s1) dm = UpdateIndex n (ValPtr s1) dm
-  -- PokePF n a a dm = dm
-  PokePF _ a b _ =
-    TypeError
-      ( Text "Poke type error: "
-          :<>: Text "expect: "
-          :<>: ShowType a
-          :<>: Text " actuale: "
-          :<>: ShowType b
-      )
+type family
+  PokePF
+    (n :: Nat)
+    (val' :: Type)
+    (val :: Type)
+    (ts :: [Type])
+    :: Maybe [Type]
+  where
+  PokePF _ NullPtr NullPtr dm = Just dm
+  PokePF n NullPtr (ValPtr s) dm = Just (UpdateIndex n (ValPtr s) dm)
+  PokePF n (ValPtr _) NullPtr dm = Just (UpdateIndex n NullPtr dm)
+  PokePF n (ValPtr _) (ValPtr s1) dm = Just (UpdateIndex n (ValPtr s1) dm)
+  PokePF n a a dm = Just dm
+  PokePF _ a b _ = Nothing
+
+type family
+  InsertOverwritingWithMaybe
+    (s :: Symbol)
+    (v :: Maybe [Type])
+    (dm :: DM)
+    :: DM
+  where
+  InsertOverwritingWithMaybe s Nothing dm = TypeError (Text "Poke type error")
+  InsertOverwritingWithMaybe s (Just v) dm = InsertOverwriting s v dm
+
+-- TypeError
+--   ( Text "Poke type error: "
+--       :<>: Text "expect: "
+--       :<>: ShowType a
+--       :<>: Text " actuale: "
+--       :<>: ShowType b
+--   )
 
 data MPtr (ia :: DM -> Type) (b :: DM) where
   MReturn :: ia c -> MPtr ia c
@@ -116,7 +134,7 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
     -> val
     -> MPtr
         ia
-        ( InsertOverwriting
+        ( InsertOverwritingWithMaybe
             s
             ( PokePF
                 n
@@ -169,7 +187,7 @@ pokeptrf
   -> MPtr
       ( At
           ()
-          ( InsertOverwriting
+          ( InsertOverwritingWithMaybe
               s
               ( PokePF
                   n
@@ -190,10 +208,10 @@ foo = I.do
   At v <- peekptr k1
   At v1 <- peekptrf k1 1
   LiftM $ print v1 >> pure (returnAt ())
+  pokeptrf k1 (Proxy @1000) k2
   pokeptrf k1 (Proxy @1) k2
   pokeptrf k1 (Proxy @2) k2
-  pokeptrf k1 (Proxy @2) k2
-  pokeptrf k1 (Proxy @1) k2
+  pokeptrf k1 (Proxy @0) k2
   -- pokeptrf k1 2 "st"
   -- pokeptrf k1 2 k2
   -- pokeptrf k1 2 k2
