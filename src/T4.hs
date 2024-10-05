@@ -17,7 +17,6 @@ import qualified Data.IFunctor as I
 import Data.Kind
 import Data.Proxy
 import Data.Type.Map (Insert, InsertOverwriting, Lookup, Map)
-import Data.Void
 import Foreign
 import GHC.TypeLits
 
