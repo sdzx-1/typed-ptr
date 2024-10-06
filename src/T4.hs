@@ -105,18 +105,19 @@ type family FromJust (s :: Maybe a) :: a where
 data MPtr (ia :: DM -> Type) (b :: DM) where
   MReturn :: ia c -> MPtr ia c
   NewPtr
-    :: (Nothing ~ Lookup s dm)
+    :: (CheckNothing (Lookup s dm) s "Already existing ptr: ")
     => Proxy (s :: Symbol)
     -> Struct ts
     -> (At (ValPtr s) (Insert s ts dm) ~> MPtr ia)
     -> MPtr ia dm
   PeekPtr
-    :: (Just ts ~ Lookup s dm)
+    :: (CheckJust (Lookup s dm) s "Peek freed ptr: ")
     => ValPtr s
-    -> (At (Struct ts) dm ~> MPtr ia)
+    -> (At (Struct (FromJust (Lookup s dm))) dm ~> MPtr ia)
     -> MPtr ia dm
   PeekPtrField
-    :: ( Just ts ~ Lookup s dm
+    :: ( CheckJust (Lookup s dm) s "Peek freed ptr: "
+       , ts ~ FromJust (Lookup s dm)
        , val ~ Index n ts
        )
     => ValPtr s
@@ -124,7 +125,8 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
     -> (At val dm ~> MPtr ia)
     -> MPtr ia dm
   PokePtrField
-    :: ( Just ts ~ Lookup s dm
+    :: ( CheckJust (Lookup s dm) s "Peek freed ptr: "
+       , ts ~ FromJust (Lookup s dm)
        , val' ~ Index n ts
        , Check val' val
        , newts ~ UpdateIndex n val ts
@@ -136,7 +138,7 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
     -> MPtr ia newdm
     -> MPtr ia dm
   FreePtr
-    :: ( Just ts ~ Lookup s dm
+    :: ( CheckJust (Lookup s dm) s ("Double free ptr: ")
        , newdm ~ DeleteVal (ValPtr s) (Delete s dm)
        )
     => ValPtr s
