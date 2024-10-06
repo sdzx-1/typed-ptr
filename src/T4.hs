@@ -169,19 +169,21 @@ instance IMonad MPtr where
 
 newptr
   :: forall (s :: Symbol)
-    ->(Nothing ~ Lookup s dm)
+    ->(CheckNothing (Lookup s dm) s "Already existing ptr: ")
   => Struct ts -> MPtr (At (ValPtr s) (Insert s ts dm)) dm
 newptr s st = NewPtr (Proxy @s) st ireturn
 
 peekptr
-  :: (Just ts ~ Lookup s dm)
-  => ValPtr s -> MPtr (At (Struct ts) dm) dm
+  :: (CheckJust (Lookup s dm) s "Peek freed ptr: ")
+  => ValPtr s -> MPtr (At (Struct (FromJust (Lookup s dm))) dm) dm
 peekptr vs = PeekPtr vs ireturn
 
 peekptrf
   :: ValPtr s
   -> forall (n :: Nat)
-    ->(Just ts ~ Lookup s dm)
+    ->( CheckJust (Lookup s dm) s "Peek freed ptr: "
+      , Just ts ~ Lookup s dm
+      )
   => MPtr (At (Index n ts) dm) dm
 peekptrf vps n = PeekPtrField vps (Proxy @n) ireturn
 
@@ -189,7 +191,8 @@ pokeptrf
   :: ValPtr s
   -> forall (n :: Nat)
     ->val
-  -> ( Just ts ~ Lookup s dm
+  -> ( CheckJust (Lookup s dm) s "Peek freed ptr: "
+     , ts ~ FromJust (Lookup s dm)
      , val' ~ Index n ts
      , Check val' val
      , newts ~ UpdateIndex n val ts
@@ -199,7 +202,9 @@ pokeptrf
 pokeptrf vps n val = PokePtrField vps (Proxy @n) val (returnAt ())
 
 freeptr
-  :: (Just ts ~ Lookup s dm)
+  :: ( CheckJust (Lookup s dm) s ("Double free ptr: ")
+     , newdm ~ DeleteVal (ValPtr s) (Delete s dm)
+     )
   => ValPtr s
   -> MPtr (At () (DeleteVal (ValPtr s) (Delete s dm))) dm
 freeptr vs = FreePtr vs (returnAt ())
