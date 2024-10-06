@@ -59,6 +59,7 @@ library
 
     -- Modules exported by the library.
     exposed-modules:  T4
+                   ,  S1
                    ,  Data.Type.LazyEquality
                    ,  Data.Type.Map
                    ,  Data.Type.POrd
@@ -74,6 +75,7 @@ library
     -- Other library packages from which modules are imported.
     build-depends:    base ^>=4.20.0.0
                    ,  text-short
+                   ,  c-storable-deriving
                    ,  constraints
 
     -- Directories containing source files.
