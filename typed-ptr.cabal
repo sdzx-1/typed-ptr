@@ -58,9 +58,7 @@ library
     import:           warnings
 
     -- Modules exported by the library.
-    exposed-modules: T2 
-                   ,  T3
-                   ,  T4
+    exposed-modules:  T4
                    ,  Data.Type.LazyEquality
                    ,  Data.Type.Map
                    ,  Data.Type.POrd
