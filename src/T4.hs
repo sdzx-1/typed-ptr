@@ -125,7 +125,7 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
     -> (At val dm ~> MPtr ia)
     -> MPtr ia dm
   PokePtrField
-    :: ( CheckJust (Lookup s dm) s "Peek freed ptr: "
+    :: ( CheckJust (Lookup s dm) s "Poke freed ptr: "
        , ts ~ FromJust (Lookup s dm)
        , val' ~ Index n ts
        , Check val' val
@@ -191,7 +191,7 @@ pokeptrf
   :: ValPtr s
   -> forall (n :: Nat)
     ->val
-  -> ( CheckJust (Lookup s dm) s "Peek freed ptr: "
+  -> ( CheckJust (Lookup s dm) s "Poke freed ptr: "
      , ts ~ FromJust (Lookup s dm)
      , val' ~ Index n ts
      , Check val' val
