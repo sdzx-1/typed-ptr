@@ -94,6 +94,10 @@ type family DeleteVal (v :: Type) (i :: DM) :: DM where
 type family CheckJust (ms :: Maybe a) (sym :: Symbol) (errorMsg :: Symbol) :: Constraint where
   CheckJust (Just _) _ _ = ()
   CheckJust Nothing sym errorMsg = TypeError (Text errorMsg :<>: ShowType sym)
+
+type family CheckNothing (ms :: Maybe a) (sym :: Symbol) (errorMsg :: Symbol) :: Constraint where
+  CheckNothing Nothing _ _ = ()
+  CheckNothing (Just _) sym errorMsg = TypeError (Text errorMsg :<>: ShowType sym)
 data MPtr (ia :: DM -> Type) (b :: DM) where
   MReturn :: ia c -> MPtr ia c
   NewPtr
