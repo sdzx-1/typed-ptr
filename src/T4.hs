@@ -19,6 +19,7 @@ import Data.Kind
 import Data.Proxy
 import Data.Type.Map (Delete, Insert, InsertOverwriting, Lookup, Map, type (:->) (..))
 import Foreign
+import GHC.TypeError (Unsatisfiable)
 import GHC.TypeLits
 
 type DM = Map Symbol [Type]
@@ -75,7 +76,7 @@ type family Check (val' :: Type) (val :: Type) :: Constraint where
   Check (ValPtr s) (ValPtr s1) = ()
   Check a a = ()
   Check a b =
-    TypeError
+    Unsatisfiable
       ( Text "Poke the error type, E: "
           :<>: ShowType a
           :<>: Text " A: "
@@ -93,11 +94,11 @@ type family DeleteVal (v :: Type) (i :: DM) :: DM where
 
 type family CheckJust (ms :: Maybe a) (sym :: Symbol) (errorMsg :: Symbol) :: Constraint where
   CheckJust (Just _) _ _ = ()
-  CheckJust Nothing sym errorMsg = TypeError (Text errorMsg :<>: ShowType sym)
+  CheckJust Nothing sym errorMsg = Unsatisfiable (Text errorMsg :<>: ShowType sym)
 
 type family CheckNothing (ms :: Maybe a) (sym :: Symbol) (errorMsg :: Symbol) :: Constraint where
   CheckNothing Nothing _ _ = ()
-  CheckNothing (Just _) sym errorMsg = TypeError (Text errorMsg :<>: ShowType sym)
+  CheckNothing (Just _) sym errorMsg = Unsatisfiable (Text errorMsg :<>: ShowType sym)
 
 type family FromJust (s :: Maybe a) :: a where
   FromJust (Just a) = a
