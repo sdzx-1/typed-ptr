@@ -2,6 +2,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE QualifiedDo #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RequiredTypeArguments #-}
@@ -16,7 +17,7 @@ import Data.IFunctor (At (..), IFunctor (..), IMonad (..), returnAt, type (~>))
 import qualified Data.IFunctor as I
 import Data.Kind
 import Data.Proxy
-import Data.Type.Map (Insert, InsertOverwriting, Lookup, Map)
+import Data.Type.Map (Delete, Insert, InsertOverwriting, Lookup, Map, type (:->) (..))
 import Foreign
 import GHC.TypeLits
 
@@ -81,6 +82,15 @@ type family Check (val' :: Type) (val :: Type) :: Constraint where
           :<>: ShowType b
       )
 
+type family DeleteList (v :: Type) (ls :: [Type]) :: [Type] where
+  DeleteList (ValPtr s) (ValPtr s ': xs) = NullPtr ': DeleteList (ValPtr s) xs
+  DeleteList (ValPtr s) (x ': xs) = x ': DeleteList (ValPtr s) xs
+  DeleteList (ValPtr s) '[] = '[]
+
+type family DeleteVal (v :: Type) (i :: DM) :: DM where
+  DeleteVal v '[] = '[]
+  DeleteVal v ((k ':-> ls) ': is) = (k ':-> DeleteList v ls) ': DeleteVal v is
+
 data MPtr (ia :: DM -> Type) (b :: DM) where
   MReturn :: ia c -> MPtr ia c
   NewPtr
@@ -114,6 +124,13 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
     -> val
     -> MPtr ia newdm
     -> MPtr ia dm
+  FreePtr
+    :: ( Just ts ~ Lookup s dm
+       , newdm ~ DeleteVal (ValPtr s) (Delete s dm)
+       )
+    => ValPtr s
+    -> MPtr ia newdm
+    -> MPtr ia dm
   LiftM :: IO (MPtr ia dm) -> MPtr ia dm
 
 instance IFunctor MPtr where
@@ -123,6 +140,7 @@ instance IFunctor MPtr where
     PeekPtr vs contF -> PeekPtr vs (imap f . contF)
     PeekPtrField vs n contF -> PeekPtrField vs n (imap f . contF)
     PokePtrField vs n val cont -> PokePtrField vs n val (imap f cont)
+    FreePtr vs cont -> FreePtr vs (imap f cont)
     LiftM ma -> LiftM (fmap (imap f) ma)
 
 instance IMonad MPtr where
@@ -133,6 +151,7 @@ instance IMonad MPtr where
     PeekPtr vs contF -> PeekPtr vs (ibind f . contF)
     PeekPtrField vs n contF -> PeekPtrField vs n (ibind f . contF)
     PokePtrField vs n val cont -> PokePtrField vs n val (ibind f cont)
+    FreePtr vs cont -> FreePtr vs (ibind f cont)
     LiftM ma -> LiftM (fmap (ibind f) ma)
 
 newptr
@@ -166,17 +185,20 @@ pokeptrf
   => MPtr (At () newdm) dm
 pokeptrf vps n val = PokePtrField vps (Proxy @n) val (returnAt ())
 
+freeptr
+  :: (Just ts ~ Lookup s dm)
+  => ValPtr s
+  -> MPtr (At () (DeleteVal (ValPtr s) (Delete s dm))) dm
+freeptr vs = FreePtr vs (returnAt ())
+
 foo :: MPtr (At () '[]) '[]
 foo = I.do
-  At k1 <- newptr "k1" (True     :& (0 :: Int)    :& NullPtrC :& End)
+  At k1 <- newptr "k1" (True :& (0 :: Int) :& NullPtrC :& End)
   At k2 <- newptr "k2" (NullPtrC :& (1 :: Double) :& End)
-  At k3 <- newptr "k3" (True     :& False         :& End)
+  At k3 <- newptr "k3" (True :& False :& End)
   pokeptrf k1 0 False
   pokeptrf k1 1 (10 :: Int)
   pokeptrf k1 2 k2
-
-  pokeptrf k2 1 (10 :: Double)
-  pokeptrf k2 0 k1
 
   At v12 <- peekptrf k1 2
   pokeptrf v12 1 (10 :: Double)
@@ -186,5 +208,6 @@ foo = I.do
   At v12' <- peekptrf k1 2
   pokeptrf v12' 0 False
   pokeptrf v12' 1 True
-  undefined
-
+  freeptr k1
+  freeptr k2
+  freeptr k3
