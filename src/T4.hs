@@ -98,6 +98,10 @@ type family CheckJust (ms :: Maybe a) (sym :: Symbol) (errorMsg :: Symbol) :: Co
 type family CheckNothing (ms :: Maybe a) (sym :: Symbol) (errorMsg :: Symbol) :: Constraint where
   CheckNothing Nothing _ _ = ()
   CheckNothing (Just _) sym errorMsg = TypeError (Text errorMsg :<>: ShowType sym)
+
+type family FromJust (s :: Maybe a) :: a where
+  FromJust (Just a) = a
+
 data MPtr (ia :: DM -> Type) (b :: DM) where
   MReturn :: ia c -> MPtr ia c
   NewPtr
