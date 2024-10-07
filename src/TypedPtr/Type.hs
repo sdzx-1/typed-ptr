@@ -19,7 +19,7 @@ import GHC.TypeError (Unsatisfiable)
 import GHC.TypeLits
 import TypedPtr.Storable
 
-type DM = Map Symbol [Type]
+type DM = Map Symbol [Symbol :-> Type]
 
 data NullPtr = NullPtrC
 instance Show NullPtr where
@@ -117,7 +117,7 @@ type family
   Index 0 (x ': _) = x
   Index n (x ': xs) = Index (n - 1) xs
 
-type family UpdateIndex (n :: Nat) (v :: Type) (ts :: [Type]) :: [Type] where
+type family UpdateIndex (n :: Nat) (v :: a) (ts :: [a]) :: [a] where
   UpdateIndex _ _ '[] = TypeError (Text "Too big index")
   UpdateIndex 0 a (x ': xs) = a ': xs
   UpdateIndex n a (x ': xs) = x ': UpdateIndex (n - 1) a xs
@@ -137,8 +137,23 @@ type family Check (val' :: Type) (val :: Type) :: Constraint where
           :<>: ShowType b
       )
 
-type family DeleteList (v :: Type) (ls :: [Type]) :: [Type] where
-  DeleteList (StructPtr s) (StructPtr s ': xs) = NullPtr ': DeleteList (StructPtr s) xs
+type family CollVal (ls :: [Symbol :-> Type]) :: [Type] where
+  CollVal '[] = '[]
+  CollVal ((_ ':-> v) ': xs) = v ': CollVal xs
+
+type family CheckField (ptr :: Symbol) (sym :: Symbol) (sts :: [Symbol :-> Type]) :: Constraint where
+  CheckField ptr sym '[] =
+    Unsatisfiable (Text "ptr: " :<>: ShowType ptr :<>: Text " not have field: " :<>: ShowType sym)
+  CheckField ptr sym ((sym ':-> _) ': xs) = ()
+  CheckField ptr sym ((_ ':-> _) ': xs) = CheckField ptr sym xs
+
+type family LookupField (sym :: Symbol) (i :: Nat) (sts :: [Symbol :-> Type]) :: Nat where
+  LookupField sym i ((sym ':-> _) ': xs) = i
+  LookupField sym i ((_ ':-> _) ': xs) = LookupField sym (i + 1) xs
+
+type family DeleteList (v :: Type) (sls :: [Symbol :-> Type]) :: [Symbol :-> Type] where
+  DeleteList (StructPtr s) ((sym ':-> StructPtr s) ': xs) =
+    (sym ':-> NullPtr) ': DeleteList (StructPtr s) xs
   DeleteList (StructPtr s) (x ': xs) = x ': DeleteList (StructPtr s) xs
   DeleteList (StructPtr s) '[] = '[]
 

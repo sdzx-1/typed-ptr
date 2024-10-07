@@ -16,7 +16,7 @@ module TypedPtr.Core where
 import Data.IFunctor (At (..), IFunctor (..), IMonad (..), returnAt, type (~>))
 import Data.Kind
 import Data.Proxy
-import Data.Type.Map (Delete, Insert, InsertOverwriting, Lookup)
+import Data.Type.Map (Delete, Insert, InsertOverwriting, Lookup, (:->) (..))
 import Foreign
 import GHC.TypeLits
 import TypedPtr.Storable
@@ -26,18 +26,20 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
   MReturn :: ia c -> MPtr ia c
   NewPtr
     :: ( CheckNothing (Lookup s dm) s "Already existing ptr: "
+       , ts ~ CollVal sts
        , KnownNat (ListMaxAlignment 0 ts)
        , KnownNat (Last (Acc0 0 ts ts))
        , T2L (Init (Acc0 0 ts ts))
        , PeekStruct ts
        )
     => Proxy (s :: Symbol)
+    -> Proxy (sts :: [Symbol :-> Type])
     -> Struct ts
-    -> (At (StructPtr s) (Insert s ts dm) ~> MPtr ia)
+    -> (At (StructPtr s) (Insert s sts dm) ~> MPtr ia)
     -> MPtr ia dm
   PeekPtr
     :: ( CheckJust (Lookup s dm) s "Peek freed ptr: "
-       , ts ~ (FromJust (Lookup s dm))
+       , ts ~ CollVal (FromJust (Lookup s dm))
        , KnownNat (ListMaxAlignment 0 ts)
        , KnownNat (Last (Acc0 0 ts ts))
        , T2L (Init (Acc0 0 ts ts))
@@ -48,30 +50,36 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
     -> MPtr ia dm
   PeekPtrField
     :: ( CheckJust (Lookup s dm) s "Peek freed ptr: "
-       , ts ~ FromJust (Lookup s dm)
+       , CheckField s sym sts
+       , sts ~ FromJust (Lookup s dm)
+       , ts ~ CollVal sts
+       , n ~ LookupField sym 0 sts
        , val ~ Index n ts
        , offset ~ Index n (Init (Acc0 0 ts ts))
        , Storable val
        , KnownNat offset
        )
     => StructPtr s
-    -> Proxy (n :: Nat)
+    -> Proxy (sym :: Symbol)
     -> Proxy (offset :: Nat)
     -> (At val dm ~> MPtr ia)
     -> MPtr ia dm
   PokePtrField
     :: ( CheckJust (Lookup s dm) s "Poke freed ptr: "
-       , ts ~ FromJust (Lookup s dm)
-       , val' ~ Index n ts
+       , CheckField s sym0 sts
+       , sts ~ (FromJust (Lookup s dm))
+       , ts ~ CollVal sts
+       , n ~ LookupField sym0 0 sts
+       , (sym ':-> val') ~ Index n sts
        , Check val' val
-       , newts ~ UpdateIndex n val ts
+       , newts ~ UpdateIndex n (sym ':-> val) sts
        , newdm ~ InsertOverwriting s newts dm
        , offset ~ Index n (Init (Acc0 0 ts ts))
        , Storable val
        , KnownNat offset
        )
     => StructPtr s
-    -> Proxy (n :: Nat)
+    -> Proxy (sym0 :: Symbol)
     -> Proxy (offset :: Nat)
     -> val
     -> MPtr ia newdm
@@ -88,7 +96,7 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
 instance IFunctor MPtr where
   imap f = \case
     MReturn a -> MReturn (f a)
-    NewPtr s st contF -> NewPtr s st (imap f . contF)
+    NewPtr s sts st contF -> NewPtr s sts st (imap f . contF)
     PeekPtr vs contF -> PeekPtr vs (imap f . contF)
     PeekPtrField vs n offset contF -> PeekPtrField vs n offset (imap f . contF)
     PokePtrField vs n offset val cont -> PokePtrField vs n offset val (imap f cont)
@@ -99,7 +107,7 @@ instance IMonad MPtr where
   ireturn = MReturn
   ibind f = \case
     MReturn a -> f a
-    NewPtr s st contF -> NewPtr s st (ibind f . contF)
+    NewPtr s sts st contF -> NewPtr s sts st (ibind f . contF)
     PeekPtr vs contF -> PeekPtr vs (ibind f . contF)
     PeekPtrField vs n offset contF -> PeekPtrField vs n offset (ibind f . contF)
     PokePtrField vs n offset val cont -> PokePtrField vs n offset val (ibind f cont)
@@ -108,62 +116,70 @@ instance IMonad MPtr where
 
 newptr
   :: forall (s :: Symbol)
+    ->forall (sts :: [Symbol :-> Type])
     ->( CheckNothing (Lookup s dm) s "Already existing ptr: "
+      , ts ~ CollVal sts
       , KnownNat (ListMaxAlignment 0 ts)
       , KnownNat (Last (Acc0 0 ts ts))
       , T2L (Init (Acc0 0 ts ts))
       , PeekStruct ts
       )
-  => Struct ts -> MPtr (At (StructPtr s) (Insert s ts dm)) dm
-newptr s st = NewPtr (Proxy @s) st ireturn
+  => Struct ts -> MPtr (At (StructPtr s) (Insert s sts dm)) dm
+newptr s sts st = NewPtr (Proxy @s) (Proxy @sts) st ireturn
 
 peekptr
   :: ( CheckJust (Lookup s dm) s "Peek freed ptr: "
-     , ts ~ (FromJust (Lookup s dm))
+     , ts ~ CollVal (FromJust (Lookup s dm))
      , KnownNat (ListMaxAlignment 0 ts)
      , KnownNat (Last (Acc0 0 ts ts))
      , T2L (Init (Acc0 0 ts ts))
      , PeekStruct ts
      )
-  => StructPtr s -> MPtr (At (Struct (FromJust (Lookup s dm))) dm) dm
+  => StructPtr s -> MPtr (At (Struct (CollVal (FromJust (Lookup s dm)))) dm) dm
 peekptr vs = PeekPtr vs ireturn
 
 peekptrf
-  :: forall s dm ts val offset
+  :: forall s dm ts val offset n sts
    . StructPtr s
-  -> forall (n :: Nat)
+  -> forall (sym :: Symbol)
     ->( CheckJust (Lookup s dm) s "Peek freed ptr: "
-      , Just ts ~ Lookup s dm
+      , CheckField s sym sts
+      , sts ~ FromJust (Lookup s dm)
+      , ts ~ CollVal sts
+      , n ~ LookupField sym 0 sts
       , val ~ Index n ts
-      , Storable val
       , offset ~ Index n (Init (Acc0 0 ts ts))
+      , Storable val
       , KnownNat offset
       )
   => MPtr (At (Index n ts) dm) dm
-peekptrf vps n =
+peekptrf vps sym =
   PeekPtrField
     vps
-    (Proxy @n)
+    (Proxy @sym)
     (Proxy @offset)
     ireturn
 
 pokeptrf
-  :: forall s val dm ts val' newts newdm offset
+  :: forall s val dm sts ts sym val' newts newdm offset n
    . StructPtr s
-  -> forall (n :: Nat)
+  -> forall (sym0 :: Symbol)
     ->val
   -> ( CheckJust (Lookup s dm) s "Poke freed ptr: "
-     , ts ~ FromJust (Lookup s dm)
-     , val' ~ Index n ts
+     , CheckField s sym0 sts
+     , sts ~ (FromJust (Lookup s dm))
+     , ts ~ CollVal sts
+     , n ~ LookupField sym0 0 sts
+     , (sym ':-> val') ~ Index n sts
      , Check val' val
-     , newts ~ UpdateIndex n val ts
+     , newts ~ UpdateIndex n (sym ':-> val) sts
      , newdm ~ InsertOverwriting s newts dm
      , offset ~ Index n (Init (Acc0 0 ts ts))
      , Storable val
      , KnownNat offset
      )
   => MPtr (At () newdm) dm
-pokeptrf vps n val = PokePtrField vps (Proxy @n) (Proxy @offset) val (returnAt ())
+pokeptrf vps sym0 val = PokePtrField vps (Proxy @sym0) (Proxy @offset) val (returnAt ())
 
 freeptr
   :: ( CheckJust (Lookup s dm) s ("Double free ptr: ")
@@ -179,7 +195,7 @@ liftm ma = LiftM (ma >>= pure . returnAt)
 runMPtr :: MPtr (At a dm') dm -> IO a
 runMPtr = \case
   MReturn (At a) -> pure a
-  NewPtr _ (st :: Struct ts) cont -> do
+  NewPtr _ _ (st :: Struct ts) cont -> do
     ptr <- malloc @(Struct ts)
     poke ptr st
     runMPtr (cont (At (StructPtrC ptr)))
