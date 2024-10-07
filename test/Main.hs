@@ -8,7 +8,7 @@ module Main (main) where
 import Control.Monad (replicateM_)
 import Data.IFunctor (At (..))
 import qualified Data.IFunctor as I
-import T4
+import TypedPtr
 
 main :: IO ()
 main = do

@@ -1,50 +1,41 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RequiredTypeArguments #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# OPTIONS_GHC -Wno-unused-imports #-}
 
-module S1 where
+module TypedPtr.Storable where
 
-import Data.IFunctor (At (..))
 import Data.Kind
 import Data.Proxy
 import Data.Type.Ord
 import Foreign
-import Foreign.CStorable (CStorable (..))
-import GHC.Generics (Generic)
 import GHC.TypeNats
 
 type family Alignment (t :: Type) :: Nat
 type family Size (t :: Type) :: Nat
 
--- storInfo :: forall a -> (Storable a) => (Int, Int)
--- storInfo a = (sizeOf @a undefined, alignment @a undefined)
+{-
+storInfo :: forall a -> (Storable a) => (Int, Int)
+storInfo a = (sizeOf @a undefined, alignment @a undefined)
 
--- foo :: IO ()
--- foo =
---   print
---     [ ("Char", storInfo Char)
---     , ("Bool", storInfo Bool)
---     , ("Int", storInfo Int)
---     , ("Double", storInfo Double)
---     , ("Word8", storInfo Word8)
---     , ("Float", storInfo Float)
---     , ("Word", storInfo Word)
---     , ("Word8", storInfo Word8)
---     , ("Word16", storInfo Word16)
---     , ("Word32", storInfo Word32)
---     , ("Word64", storInfo Word64)
---     ]
+foo :: IO ()
+foo =
+  print
+    [ ("Char", storInfo Char)
+    , ("Bool", storInfo Bool)
+    , ("Int", storInfo Int)
+    , ("Double", storInfo Double)
+    , ("Word8", storInfo Word8)
+    , ("Float", storInfo Float)
+    , ("Word", storInfo Word)
+    , ("Word8", storInfo Word8)
+    , ("Word16", storInfo Word16)
+    , ("Word32", storInfo Word32)
+    , ("Word64", storInfo Word64)
+    ]
+-}
 
 type instance Alignment Char = 4
 type instance Alignment Bool = 4

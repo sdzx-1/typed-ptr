@@ -58,12 +58,14 @@ library
     import:           warnings
 
     -- Modules exported by the library.
-    exposed-modules:  T4
-                   ,  S1
-                   ,  Data.Type.LazyEquality
+    exposed-modules:  Data.Type.LazyEquality
                    ,  Data.Type.Map
                    ,  Data.Type.POrd
                    ,  Data.IFunctor
+                   ,  TypedPtr.Type
+                   ,  TypedPtr.Core
+                   ,  TypedPtr.Storable
+                   ,  TypedPtr
 
 
     -- Modules included in this library but not exported.
