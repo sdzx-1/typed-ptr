@@ -62,7 +62,7 @@ type family All (c :: Type -> Constraint) (ts :: [Type]) :: Constraint where
 
 instance (All Show ts) => Show (Struct ts) where
   show = \case
-    End -> "}}"
+    End -> "{}"
     v :& End -> "{" ++ show v ++ "}"
     v :& vs -> "{" ++ show v ++ ", " ++ (drop 1 $ show vs)
 
