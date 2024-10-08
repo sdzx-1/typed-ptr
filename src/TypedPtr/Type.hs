@@ -130,8 +130,8 @@ instance
   )
   => Storable (Struct ts)
   where
-  sizeOf _ = fromIntegral $ natVal (Proxy @(Alignment (Struct ts)))
-  alignment _ = fromIntegral $ natVal (Proxy @(Size (Struct ts)))
+  sizeOf _ = fromIntegral $ natVal (Proxy @(Size (Struct ts)))
+  alignment _ = fromIntegral $ natVal (Proxy @(Alignment (Struct ts)))
   poke ptr struct = do
     let offsets = t2l (Proxy @(Init (Acc0 0 ts ts)))
     pokeStruct ptr offsets struct
