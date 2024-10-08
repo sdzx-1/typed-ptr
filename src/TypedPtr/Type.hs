@@ -40,23 +40,31 @@ instance Storable NullPtr where
 
 data Array (size :: Nat) (a :: Type) = ArrayC [a]
 
-type instance Alignment (Array size t) = Alignment t
+type instance
+  Alignment (Array size t) =
+    Alignment t
 type instance Size (Array size t) = size * Size t
 
 instance (Show a) => Show (Array n a) where
   show (ArrayC ls) = "Array: " <> show ls
 
-instance (Storable t, KnownNat size) => Storable (Array size t) where
+instance
+  ( Storable t
+  , KnownNat size
+  )
+  => Storable (Array size t)
+  where
   sizeOf _ = fromIntegral (natVal (Proxy @size)) * (sizeOf @t undefined)
   alignment _ = alignment @t undefined
   peek ptr = do
     let len = fromIntegral $ natVal (Proxy @size)
-    vals <- for [0 .. len - 1] $ \i -> peek @t (castPtr (ptr `plusPtr` i))
+    vals <- for [0 .. len - 1] $
+      \i -> peek @t (castPtr (ptr `plusPtr` (i * (sizeOf @t undefined))))
     pure (ArrayC vals)
   poke ptr (ArrayC ls) = do
     let len = fromIntegral $ natVal (Proxy @size)
-    for_ (zip [0 ..] (take len ls)) $
-      \(i, v) -> poke @t (castPtr (ptr `plusPtr` i)) v
+    for_ (zip [0 .. len - 1] (take len ls)) $
+      \(i, v) -> poke @t (castPtr (ptr `plusPtr` (i * (sizeOf @t undefined)))) v
 
 data StructPtr (s :: Symbol) = forall a. StructPtrC (Ptr a)
 
