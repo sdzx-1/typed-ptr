@@ -192,6 +192,14 @@ freeptr vs = FreePtr vs (returnAt ())
 liftm :: IO a -> MPtr (At a dm) dm
 liftm ma = LiftM (ma >>= pure . returnAt)
 
+toPtrStruct
+  :: ( CheckJust (Lookup s dm) s "Use freed ptr: "
+     , sts ~ (FromJust (Lookup s dm))
+     )
+  => StructPtr s
+  -> MPtr (At (Ptr (Struct (CollVal sts))) dm) dm
+toPtrStruct (StructPtrC ptr) = LiftM $ pure (returnAt (castPtr ptr))
+
 runMPtr :: MPtr (At a dm') dm -> IO a
 runMPtr = \case
   MReturn (At a) -> pure a
