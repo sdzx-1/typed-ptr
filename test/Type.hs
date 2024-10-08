@@ -44,22 +44,6 @@ stripPtr _ = error "stripPtr"
 
 --------------------------------
 
-type K1Struct =
-  '[ "field0" ':-> Bool
-   , "field1" ':-> Int
-   , "field2" ':-> NullPtr
-   ]
-
-type K2Struct =
-  '[ "field0" ':-> NullPtr
-   , "field1" ':-> Double
-   ]
-
-type K3Struct =
-  '[ "field0" ':-> Bool
-   , "field1" ':-> Bool
-   ]
-
 type U32 = Word32
 type U8 = Word8
 type CUint = U32
@@ -90,14 +74,13 @@ type Termios =
    , "c_ospeed" ':-> Speed_t
    ]
 
-
 defaultTermSize :: Struct (CollVal TermSize)
 defaultTermSize =
   80 :& 60 :& 0 :& 0 :& End
 
 defaultTermios :: Struct (CollVal Termios)
 defaultTermios =
-  0 :& 0 :& 0 :& 0 :& 0 :& (ArrayC [0, 1 ..]) :& 0 :& 0 :& End
+  0 :& 0 :& 0 :& 0 :& 0 :& (ArrayC [0 ..]) :& 0 :& 0 :& End
 
 pattern TIOCGWINSZ :: Ioctl
 pattern TIOCGWINSZ = 0x5413
