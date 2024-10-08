@@ -66,7 +66,7 @@ type CUint = U32
 
 type CUChar = U8
 type TcFlag_t = CUint
-type CC_t = CUChar
+type CC_t = U8
 type Speed_t = CUint
 type CUShort = Word16
 type CULong = Word64
@@ -90,13 +90,14 @@ type Termios =
    , "c_ospeed" ':-> Speed_t
    ]
 
+
 defaultTermSize :: Struct (CollVal TermSize)
 defaultTermSize =
   80 :& 60 :& 0 :& 0 :& End
 
 defaultTermios :: Struct (CollVal Termios)
 defaultTermios =
-  0 :& 0 :& 0 :& 0 :& 0 :& (ArrayC [0 .. 31]) :& 0 :& 0 :& End
+  0 :& 0 :& 0 :& 0 :& 0 :& (ArrayC [0, 1 ..]) :& 0 :& 0 :& End
 
 pattern TIOCGWINSZ :: Ioctl
 pattern TIOCGWINSZ = 0x5413
