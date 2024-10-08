@@ -94,7 +94,7 @@ test-suite typed-ptr-test
     default-language: Haskell2010
 
     -- Modules included in this executable, other than Main.
-    -- other-modules:
+    other-modules: Type
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
