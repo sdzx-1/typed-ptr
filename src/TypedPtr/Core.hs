@@ -29,7 +29,7 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
        , ts ~ CollVal sts
        , KnownNat (ListMaxAlignment 0 ts)
        , KnownNat (Last (Acc0 0 ts ts))
-       , T2L (Init (Acc0 0 ts ts))
+       , ReifyOffsets (Init (Acc0 0 ts ts))
        , PeekStruct ts
        )
     => Proxy (s :: Symbol)
@@ -42,7 +42,7 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
        , ts ~ CollVal (FromJust (Lookup s dm))
        , KnownNat (ListMaxAlignment 0 ts)
        , KnownNat (Last (Acc0 0 ts ts))
-       , T2L (Init (Acc0 0 ts ts))
+       , ReifyOffsets (Init (Acc0 0 ts ts))
        , PeekStruct ts
        )
     => StructPtr s
@@ -121,7 +121,7 @@ newptr
       , ts ~ CollVal sts
       , KnownNat (ListMaxAlignment 0 ts)
       , KnownNat (Last (Acc0 0 ts ts))
-      , T2L (Init (Acc0 0 ts ts))
+      , ReifyOffsets (Init (Acc0 0 ts ts))
       , PeekStruct ts
       )
   => Struct ts -> MPtr (At (StructPtr s) (Insert s sts dm)) dm
@@ -132,7 +132,7 @@ peekptr
      , ts ~ CollVal (FromJust (Lookup s dm))
      , KnownNat (ListMaxAlignment 0 ts)
      , KnownNat (Last (Acc0 0 ts ts))
-     , T2L (Init (Acc0 0 ts ts))
+     , ReifyOffsets (Init (Acc0 0 ts ts))
      , PeekStruct ts
      )
   => StructPtr s -> MPtr (At (Struct (CollVal (FromJust (Lookup s dm)))) dm) dm

@@ -89,11 +89,11 @@ type family Init (xs :: [Nat]) :: [Nat] where
 type family Acc (xs :: [Type]) :: (Nat, [Nat]) where
   Acc xs = '(Last (Acc0 0 xs xs), Init (Acc0 0 xs xs))
 
-class T2L (s :: [Nat]) where
-  t2l :: Proxy s -> [Int]
+class ReifyOffsets (s :: [Nat]) where
+  reifyOffsets :: Proxy s -> [Int]
 
-instance T2L '[] where
-  t2l _ = []
+instance ReifyOffsets '[] where
+  reifyOffsets _ = []
 
-instance (T2L xs, KnownNat x) => T2L (x ': xs) where
-  t2l _ = fromIntegral (natVal (Proxy @x)) : t2l (Proxy @xs)
+instance (ReifyOffsets xs, KnownNat x) => ReifyOffsets (x ': xs) where
+  reifyOffsets _ = fromIntegral (natVal (Proxy @x)) : reifyOffsets (Proxy @xs)

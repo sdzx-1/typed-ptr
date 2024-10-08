@@ -125,7 +125,7 @@ instance (Storable x, PeekStruct xs) => PeekStruct (x ': xs) where
 instance
   ( KnownNat (ListMaxAlignment 0 ts)
   , KnownNat (Last (Acc0 0 ts ts))
-  , T2L (Init (Acc0 0 ts ts))
+  , ReifyOffsets (Init (Acc0 0 ts ts))
   , PeekStruct ts
   )
   => Storable (Struct ts)
@@ -133,10 +133,10 @@ instance
   sizeOf _ = fromIntegral $ natVal (Proxy @(Size (Struct ts)))
   alignment _ = fromIntegral $ natVal (Proxy @(Alignment (Struct ts)))
   poke ptr struct = do
-    let offsets = t2l (Proxy @(Init (Acc0 0 ts ts)))
+    let offsets = reifyOffsets (Proxy @(Init (Acc0 0 ts ts)))
     pokeStruct ptr offsets struct
   peek ptr = do
-    let offsets = t2l (Proxy @(Init (Acc0 0 ts ts)))
+    let offsets = reifyOffsets (Proxy @(Init (Acc0 0 ts ts)))
     peekStruct offsets ptr
 
 type family
