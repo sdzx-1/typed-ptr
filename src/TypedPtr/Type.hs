@@ -45,8 +45,8 @@ type instance
     Alignment t
 type instance Size (Array size t) = size * Size t
 
-instance (Show a) => Show (Array n a) where
-  show (ArrayC ls) = "Array: " <> show ls
+instance (KnownNat n, Show a) => Show (Array n a) where
+  show (ArrayC ls) = "Array (size " <> show (natVal (Proxy @n)) <> "): " <> show ls
 
 instance
   ( Storable t
