@@ -8,11 +8,14 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE NoStarIsType #-}
 
 module TypedPtr.Type where
 
+import Data.Foldable (for_)
 import Data.Kind
 import Data.Proxy
+import Data.Traversable (for)
 import Data.Type.Map (Map, type (:->) (..))
 import Foreign
 import GHC.TypeError (Unsatisfiable)
@@ -22,11 +25,38 @@ import TypedPtr.Storable
 type DM = Map Symbol [Symbol :-> Type]
 
 data NullPtr = NullPtrC
-instance Show NullPtr where
-  show _ = "NullPtr"
 
 type instance Alignment NullPtr = 8
 type instance Size NullPtr = 8
+
+instance Show NullPtr where
+  show _ = "NullPtr"
+
+instance Storable NullPtr where
+  sizeOf _ = 8
+  alignment _ = 8
+  peek _ = pure NullPtrC
+  poke _ _ = pure ()
+
+data Array (size :: Nat) (a :: Type) = ArrayC [a]
+
+type instance Alignment (Array size t) = Alignment t
+type instance Size (Array size t) = size * Size t
+
+instance (Show a) => Show (Array n a) where
+  show (ArrayC ls) = "Array: " <> show ls
+
+instance (Storable t, KnownNat size) => Storable (Array size t) where
+  sizeOf _ = fromIntegral (natVal (Proxy @size)) * (sizeOf @t undefined)
+  alignment _ = alignment @t undefined
+  peek ptr = do
+    let len = fromIntegral $ natVal (Proxy @size)
+    vals <- for [0 .. len - 1] $ \i -> peek @t (castPtr (ptr `plusPtr` i))
+    pure (ArrayC vals)
+  poke ptr (ArrayC ls) = do
+    let len = fromIntegral $ natVal (Proxy @size)
+    for_ (zip [0 ..] (take len ls)) $
+      \(i, v) -> poke @t (castPtr (ptr `plusPtr` i)) v
 
 data StructPtr (s :: Symbol) = forall a. StructPtrC (Ptr a)
 
@@ -35,12 +65,6 @@ type instance Size (StructPtr s) = 8
 
 instance Show (StructPtr s) where
   show (StructPtrC ptr) = show ptr
-
-instance Storable NullPtr where
-  sizeOf _ = 8
-  alignment _ = 8
-  peek _ = pure NullPtrC
-  poke _ _ = pure ()
 
 instance Storable (StructPtr a) where
   sizeOf _ = 8
