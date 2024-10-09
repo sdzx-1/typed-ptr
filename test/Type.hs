@@ -17,33 +17,6 @@ import Data.Type.Map (type (:->) ((:->)))
 import Foreign
 import TypedPtr
 
-------------Maybe a-------------
-instance (Storable a) => Storable (Maybe a) where
-  sizeOf x = sizeOf (stripMaybe x) + 1
-  alignment x = alignment (stripMaybe x)
-  peek ptr = do
-    filled <- peekByteOff ptr $ sizeOf $ stripMaybe $ stripPtr ptr
-    if filled == (1 :: Word8)
-      then do
-        x <- peek $ stripMaybePtr ptr
-        return $ Just x
-      else return Nothing
-  poke ptr Nothing = pokeByteOff ptr (sizeOf $ stripMaybe $ stripPtr ptr) (0 :: Word8)
-  poke ptr (Just a) = do
-    poke (stripMaybePtr ptr) a
-    pokeByteOff ptr (sizeOf a) (1 :: Word8)
-
-stripMaybe :: Maybe a -> a
-stripMaybe _ = error "stripMaybe"
-
-stripMaybePtr :: Ptr (Maybe a) -> Ptr a
-stripMaybePtr = castPtr
-
-stripPtr :: Ptr a -> a
-stripPtr _ = error "stripPtr"
-
---------------------------------
-
 type U32 = Word32
 type U8 = Word8
 type CUint = U32

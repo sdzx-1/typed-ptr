@@ -9,6 +9,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE NoStarIsType #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module TypedPtr.Type where
 
@@ -81,6 +82,19 @@ instance Storable (StructPtr a) where
     val <- peek (castPtr ptr)
     pure (StructPtrC val)
   poke ptr (StructPtrC nptr) = poke (castPtr ptr) nptr
+
+instance (Storable a) => Storable (Maybe a) where
+  sizeOf _ = sizeOf @a undefined + 1
+  alignment _ = alignment @a undefined
+  peek ptr = do
+    filled <- peekByteOff ptr $ sizeOf @a undefined
+    if filled == (1 :: Word8)
+      then Just <$> peek @a (castPtr ptr)
+      else return Nothing
+  poke ptr Nothing = pokeByteOff ptr (sizeOf @a undefined) (0 :: Word8)
+  poke ptr (Just a) = do
+    poke (castPtr ptr) a
+    pokeByteOff ptr (sizeOf @a undefined) (1 :: Word8)
 
 infixr 4 :&
 
