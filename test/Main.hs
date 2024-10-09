@@ -1,93 +1,121 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE NumericUnderscores #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE QualifiedDo #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RequiredTypeArguments #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
+{-# OPTIONS_GHC -Wno-unused-foralls #-}
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Main (main) where
 
-import Data.IFunctor (At (..))
-import qualified Data.IFunctor as I
+import Data.Kind
+import Data.Type.Map ((:->) (..))
 import Foreign
-import Foreign.C hiding (CUChar, CULong, CUShort)
-import GHC.IO.Device (IODeviceType (..))
-import GHC.IO.FD (FD (..), openFile)
-import GHC.IO.IOMode (IOMode (..))
-import Type
+import GHC.TypeLits
+import Test.Hspec
+import Test.QuickCheck
+import Test.QuickCheck.Monadic
+import Test.TypedPtr.Storable
 import TypedPtr
+import TypedPtr.Type
 
 main :: IO ()
-main = runMPtr foo
+main = hspec $ do
+  describe "Storable Struct poke and peek" $ do
+    it "TestValStruct" $
+      property (prop_storableStruct TestValStruct)
 
-foreign import ccall unsafe "ioctl"
-  c_ioctl
-    :: CInt
-    -> Ioctl
-    -> Ptr (Struct (CollVal TermSize))
-    -> IO CInt
+    it "TestMaybeStruct" $
+      property (prop_storableStruct TestMaybeStruct)
 
-showIOT :: IODeviceType -> String
-showIOT = \case
-  Directory -> "Directory"
-  Stream -> "Stream"
-  RegularFile -> "RegularFile"
-  RawDevice -> "RawDevice"
+    it "TestArrayStruct" $
+      property (prop_storableStruct TestArrayStruct)
 
-foreign import ccall unsafe "isatty"
-  c_isatty :: CInt -> IO CInt
+    it "TestMixStruct" $
+      property (prop_storableStruct TestMixStruct)
 
-foreign import ccall unsafe "ttyname"
-  c_ttyname :: CInt -> IO CString
+    it "TestNestStruct" $
+      property (prop_storableStruct TestNestStruct)
 
-foreign import ccall unsafe "tcgetattr"
-  c_tcgetattr
-    :: CInt
-    -> (Ptr (Struct (CollVal Termios)))
-    -> IO Int
+prop_storableStruct
+  :: forall (sts :: [Symbol :-> Type])
+    ->( ts ~ CollVal sts
+      , Arbitrary (Struct ts)
+      , All Show ts
+      , All Eq ts
+      , (KnownNat (ListMaxAlignment 0 ts))
+      , KnownNat (Last (Acc0 0 ts ts))
+      , ReifyOffsets (Init (Acc0 0 ts ts))
+      , PeekStruct ts
+      )
+  => Property
+prop_storableStruct sts = monadicIO $ do
+  str <- pick (arbitrary @(Struct (CollVal sts)))
+  ptr <- run $ malloc @(Struct (CollVal sts))
+  run $ poke ptr str
+  str1 <- run $ peek ptr
+  run $ free ptr
+  assert $ str == str1
 
-pattern TCSANOW :: CInt
-pattern TCSANOW = 0
+type TestValStruct =
+  '[ "field1" ':-> Char
+   , "field2" ':-> Bool
+   , "field3" ':-> Int
+   , "field4" ':-> Double
+   , "field5" ':-> Float
+   , "field6" ':-> Word8
+   , "field7" ':-> Word16
+   , "field8" ':-> Word32
+   , "field9" ':-> Word64
+   ]
 
-foreign import ccall unsafe "tcsetattr"
-  c_tcsetattr
-    :: CInt
-    -> CInt
-    -> (Ptr (Struct (CollVal Termios)))
-    -> IO Int
+type TestMaybeStruct =
+  '[ "field1" ':-> Maybe Char
+   , "field2" ':-> Maybe Bool
+   , "field3" ':-> Maybe Int
+   , "field4" ':-> Maybe Double
+   , "field5" ':-> Maybe Float
+   , "field6" ':-> Maybe Word8
+   , "field7" ':-> Maybe Word16
+   , "field8" ':-> Maybe Word32
+   , "field9" ':-> Maybe Word64
+   ]
 
-tcsetattr
-  :: CInt
-  -> Ptr (Struct (CollVal Termios))
-  -> IO Int
-tcsetattr fd ptr =
-  c_tcsetattr fd TCSANOW ptr
+type TestArrayStruct =
+  '[ "field1" ':-> Array 1 Char
+   , "field2" ':-> Array 2 Bool
+   , "field3" ':-> Array 3 Int
+   , "field4" ':-> Array 4 Double
+   , "field5" ':-> Array 5 Float
+   , "field6" ':-> Array 6 Word8
+   , "field7" ':-> Array 7 Word16
+   , "field8" ':-> Array 8 Word32
+   , "field9" ':-> Array 9 Word64
+   ]
 
-foo :: MPtr (At () '[]) '[]
-foo = I.do
-  At termiosPtr <- newptr "termios" Termios defaultTermios
-  At termSizePtr <- newptr "termSize" TermSize defaultTermSize
-
-  At (FD{fdFD}, _) <-
-    liftm $ openFile "/dev/tty" ReadWriteMode False
-
-  At ptrStruct <- toPtrStruct termiosPtr
-  liftm $ c_tcgetattr fdFD ptrStruct
-
-  At ptrStructTermSize <- toPtrStruct termSizePtr
-  liftm $ c_ioctl fdFD TIOCGWINSZ ptrStructTermSize
-
-  At val <- peekptr termiosPtr
-  liftm $ print ("termios", val)
-
-  At val1 <- peekptr termSizePtr
-  liftm $ print ("termSize", val1)
-
-  freeptr termSizePtr
-  freeptr termiosPtr
+type TestMixStruct =
+  '[ "field1" ':-> Char
+   , "field2" ':-> Array 2 Bool
+   , "field3" ':-> Maybe Int
+   , "field4" ':-> Array 4 Double
+   , "field5" ':-> Float
+   , "field6" ':-> Word8
+   , "field7" ':-> Array 7 Word16
+   , "field8" ':-> Maybe Word32
+   , "field9" ':-> Array 9 Word64
+   ]
+type TestNestStruct =
+  '[ "field1" ':-> Char
+   , "field2" ':-> Array 2 Bool
+   , "field3" ':-> Maybe Int
+   , "field4" ':-> Struct [Int, Bool]
+   , "field5" ':-> Float
+   , "field6" ':-> Word8
+   , "field7" ':-> Array 7 Word16
+   , "field8" ':-> Maybe Word32
+   , "field9" ':-> Array 9 Word64
+   ]

@@ -49,6 +49,9 @@ type instance Size (Array size t) = size * Size t
 instance (KnownNat n, Show a) => Show (Array n a) where
   show (ArrayC ls) = "Array (size " <> show (natVal (Proxy @n)) <> "): " <> show ls
 
+instance (Eq a) => Eq (Array n a) where
+  ArrayC xs == ArrayC ys = xs == ys
+
 instance
   ( Storable t
   , KnownNat size
@@ -83,6 +86,9 @@ instance Storable (StructPtr a) where
     pure (StructPtrC val)
   poke ptr (StructPtrC nptr) = poke (castPtr ptr) nptr
 
+type instance Alignment (Maybe a) = Alignment a
+type instance Size (Maybe a) = Size a + 1
+
 instance (Storable a) => Storable (Maybe a) where
   sizeOf _ = sizeOf @a undefined + 1
   alignment _ = alignment @a undefined
@@ -111,6 +117,10 @@ instance (All Show ts) => Show (Struct ts) where
     End -> "{}"
     v :& End -> "{" ++ show v ++ "}"
     v :& vs -> "{" ++ show v ++ ", " ++ (drop 1 $ show vs)
+
+instance (All Eq ts) => Eq (Struct ts) where
+  End == End = True
+  (x :& xs) == (y :& ys) = x == y && xs == ys
 
 type instance Alignment (Struct xs) = ListMaxAlignment 0 xs
 type instance Size (Struct xs) = Last (Acc0 0 xs xs)
