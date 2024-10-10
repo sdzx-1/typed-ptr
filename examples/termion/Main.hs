@@ -1,10 +1,13 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE QualifiedDo #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -20,7 +23,7 @@ import Foreign.C hiding (CUChar, CULong, CUShort)
 import GHC.IO.Device (IODeviceType (..))
 import GHC.IO.FD (FD (..), openFile, stdout)
 import GHC.IO.IOMode (IOMode (..))
-import GHC.TypeLits (AppendSymbol)
+import GHC.TypeLits (AppendSymbol, KnownNat)
 import Type
 import TypedPtr
 
@@ -66,6 +69,17 @@ tcsetattr
 tcsetattr fd ptr =
   c_tcsetattr fd TCSANOW ptr
 
+copyStruct
+  :: forall ts
+   . ( KnownNat (ListMaxAlignment 0 ts)
+     , KnownNat (Last (Acc0 0 ts ts))
+     , ReifyOffsets (Init (Acc0 0 ts ts))
+     , PeekStruct ts
+     )
+  => Ptr (Struct ts) -> Ptr (Struct ts) -> IO ()
+copyStruct dest source =
+  copyBytes dest source (sizeOf @(Struct ts) undefined)
+
 foo :: MPtr (At () '[]) '[]
 foo = I.do
   let FD{fdFD} = stdout
@@ -78,20 +92,20 @@ foo = I.do
 
   -- get current termios
   liftm $ c_tcgetattr fd termiosStructPtr
-  At val <- peekStruct termiosPtr
+
+  At newptr <- toPtrStructField rawTerminal "prev_ios"
   -- copy termios to rawTerminal prev_ios
-  pokeStructf rawTerminal "prev_ios" val
+  liftm $ copyStruct newptr termiosStructPtr
 
   -- set termios ptr to raw
   liftm $ c_cfmakeraw termiosStructPtr
   -- set stdout to raw
-  liftm $ tcsetattr fdFD termiosStructPtr
+  liftm $ tcsetattr fd termiosStructPtr
   -- free temp termios
   freeptr termiosPtr
 
-  -- stdout restore 
-  At newptr <- toPtrStructField rawTerminal "prev_ios"
-  liftm $ tcsetattr fdFD newptr
+  -- stdout restore
+  liftm $ tcsetattr fd newptr
 
   freeptr rawTerminal
   liftm $ threadDelay 3000000
