@@ -218,6 +218,23 @@ toPtrStruct
   -> MPtr (At (Ptr (Struct (CollVal sts))) dm) dm
 toPtrStruct (ValPtrC ptr) = LiftM $ pure (returnAt (castPtr ptr))
 
+toPtrStructField
+  :: forall t s dm sts n offset ts
+   . (KnownNat offset)
+  => ValPtr s
+  -> forall (field :: Symbol)
+    ->( CheckJust (Lookup s dm) s "Use freed ptr: "
+      , sts ~ FromStruct (FromJust (Lookup s dm))
+      , ts ~ CollVal sts
+      , n ~ LookupField field 0 sts
+      , t ~ Index n ts
+      , offset ~ Index n (Init (Acc0 0 ts ts))
+      )
+  => MPtr (At (Ptr t) dm) dm
+toPtrStructField (ValPtrC ptr) _field = LiftM $ do
+  let offsetVal = fromIntegral $ natVal (Proxy @offset)
+  pure (returnAt (castPtr ptr `plusPtr` offsetVal))
+
 runMPtr :: MPtr (At a dm') dm -> IO a
 runMPtr = \case
   MReturn (At a) -> pure a
