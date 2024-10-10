@@ -1,11 +1,13 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Type where
 
 import Data.Type.Map (type (:->) ((:->)))
 import Foreign
+import Foreign.C (CInt)
 import TypedPtr
 
 type U32 = Word32
@@ -38,6 +40,17 @@ type Termios =
    , "c_ispeed" ':-> Speed_t
    , "c_ospeed" ':-> Speed_t
    ]
+
+type instance Alignment CInt = 4
+type instance Size CInt = 4
+
+type RawTerminal =
+  '[ "prev_ios" ':->  Struct (CollVal Termios)
+   , "output" ':-> CInt -- stdout fd
+   ]
+
+defaultRawTerminal :: Struct (CollVal RawTerminal)
+defaultRawTerminal = defaultTermios :& 0 :& End
 
 defaultTermSize :: Struct (CollVal TermSize)
 defaultTermSize =

@@ -8,17 +8,19 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
-{-# OPTIONS_GHC -Wname-shadowing #-}
 
 module Main (main) where
 
+import Control.Concurrent (threadDelay)
 import Data.IFunctor (At (..))
 import qualified Data.IFunctor as I
+import Data.Type.Map (Insert, (:->) (..))
 import Foreign
 import Foreign.C hiding (CUChar, CULong, CUShort)
 import GHC.IO.Device (IODeviceType (..))
-import GHC.IO.FD (FD (..), openFile)
+import GHC.IO.FD (FD (..), openFile, stdout)
 import GHC.IO.IOMode (IOMode (..))
+import GHC.TypeLits (AppendSymbol)
 import Type
 import TypedPtr
 
@@ -47,11 +49,14 @@ foreign import ccall unsafe "tcgetattr"
 pattern TCSANOW :: CInt
 pattern TCSANOW = 0
 
+foreign import ccall unsafe "cfmakeraw"
+  c_cfmakeraw :: (Ptr (Struct (CollVal Termios))) -> IO ()
+
 foreign import ccall unsafe "tcsetattr"
   c_tcsetattr
     :: CInt
     -> CInt
-    -> (Ptr (Struct (CollVal Termios)))
+    -> Ptr (Struct (CollVal Termios))
     -> IO Int
 
 tcsetattr
@@ -63,32 +68,46 @@ tcsetattr fd ptr =
 
 foo :: MPtr (At () '[]) '[]
 foo = I.do
+  let FD{fdFD} = stdout
+  At rawTerminal <- newStructPtr "rawTerminal" RawTerminal (defaultTermios :& fdFD :& End)
+  At fd <- peekStructf rawTerminal "output"
+
+  -- temp termios
   At termiosPtr <- newStructPtr "termios" Termios defaultTermios
-  At termSizePtr <- newStructPtr "termSize" TermSize defaultTermSize
+  At termiosStructPtr <- toPtrStruct termiosPtr
 
-  At (FD{fdFD}, _) <-
-    liftm $ openFile "/dev/tty" ReadWriteMode False
-
-  At ptrStruct <- toPtrStruct termiosPtr
-  liftm $ c_tcgetattr fdFD ptrStruct
-
-  At ptrStructTermSize <- toPtrStruct termSizePtr
-  liftm $ c_ioctl fdFD TIOCGWINSZ ptrStructTermSize
-
+  -- get current termios
+  liftm $ c_tcgetattr fd termiosStructPtr
   At val <- peekStruct termiosPtr
-  liftm $ print ("termios", val)
+  -- copy termios to rawTerminal prev_ios
+  pokeStructf rawTerminal "prev_ios" val
 
-  At val1 <- peekStruct termSizePtr
-  liftm $ print ("termSize", val1)
-
-  let bufferSize = 100
-  At bufferPtr <- newSingletonPtr "Buff" (Buffer bufferSize)
-  At strPtr <- newStructPtr "str" (Str _) (bufferPtr :& bufferSize :& End)
-
-  At val2 <- peekStruct strPtr
-  liftm $ print val2
-
-  freeptr termSizePtr
+  -- set termios ptr to raw
+  liftm $ c_cfmakeraw termiosStructPtr
+  -- set stdout to raw
+  liftm $ tcsetattr fdFD termiosStructPtr
+  -- free temp termios
   freeptr termiosPtr
-  freeptr strPtr
-  freeptr bufferPtr
+
+  -- stdout restore 
+  At newptr <- toPtrStructField rawTerminal "prev_ios"
+  liftm $ tcsetattr fdFD newptr
+
+  freeptr rawTerminal
+  liftm $ threadDelay 3000000
+
+-- let bufferSize = 100
+-- At bufferPtr <- newSingletonPtr "Buff" (Buffer bufferSize)
+-- At strPtr <- newStructPtr "str" (Str _) (bufferPtr :& bufferSize :& End)
+-- At val2 <- peekStruct strPtr
+-- liftm $ print val2
+-- pokeStructf strPtr "ptr" bufferPtr
+-- pokeStructf strPtr "len" (32 :: Word64)
+-- freeptr strPtr
+-- freeptr bufferPtr
+
+subPtr
+  :: (s1 ~ AppendSymbol s "-slice")
+  => ValPtr s
+  -> MPtr (At (ValPtr s1) dm) dm
+subPtr = undefined
