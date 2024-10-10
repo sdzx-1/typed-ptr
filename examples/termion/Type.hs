@@ -1,15 +1,6 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE QualifiedDo #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Type where
 
@@ -28,6 +19,7 @@ type Speed_t = CUint
 type CUShort = Word16
 type CULong = Word64
 type Ioctl = CULong
+type USize = Word64
 
 type TermSize =
   '[ "row" ':-> CUShort
@@ -57,3 +49,16 @@ defaultTermios =
 
 pattern TIOCGWINSZ :: Ioctl
 pattern TIOCGWINSZ = 0x5413
+
+data Buffer = Buffer Word64
+
+instance Storable Buffer where
+  sizeOf (Buffer i) = fromIntegral i
+  alignment _ = 1
+  peek _ = error "Never peek Buffer"
+  poke _ _ = error "Never poke Buffer"
+
+type Str s =
+  '[ "ptr" ':-> ValPtr s
+   , "len" ':-> USize
+   ]

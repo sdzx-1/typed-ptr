@@ -8,7 +8,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
+{-# OPTIONS_GHC -Wname-shadowing #-}
 
 module Main (main) where
 
@@ -81,5 +81,14 @@ foo = I.do
   At val1 <- peekStruct termSizePtr
   liftm $ print ("termSize", val1)
 
+  let bufferSize = 100
+  At bufferPtr <- newSingletonPtr "Buff" (Buffer bufferSize)
+  At strPtr <- newStructPtr "str" (Str _) (bufferPtr :& bufferSize :& End)
+
+  At val2 <- peekStruct strPtr
+  liftm $ print val2
+
   freeptr termSizePtr
   freeptr termiosPtr
+  freeptr strPtr
+  freeptr bufferPtr
