@@ -221,9 +221,8 @@ toPtrStruct (ValPtrC ptr) = LiftM $ pure (returnAt (castPtr ptr))
 runMPtr :: MPtr (At a dm') dm -> IO a
 runMPtr = \case
   MReturn (At a) -> pure a
-  NewSingletonPtr _ (a :: t) cont -> do
-    ptr <- malloc @t
-    poke ptr a
+  NewSingletonPtr _ a cont -> do
+    ptr <- mallocBytes (sizeOf a)
     runMPtr (cont (At (ValPtrC ptr)))
   NewStructPtr _ _ (st :: Struct ts) cont -> do
     ptr <- malloc @(Struct ts)
