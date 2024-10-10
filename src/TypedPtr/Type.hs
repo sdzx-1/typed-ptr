@@ -23,7 +23,11 @@ import GHC.TypeError (Unsatisfiable)
 import GHC.TypeLits
 import TypedPtr.Storable
 
-type DM = Map Symbol [Symbol :-> Type]
+data ValType
+  = VStruct [Symbol :-> Type]
+  | VSingleton Type
+
+type DM = Map Symbol ValType
 
 data NullPtr = NullPtrC
 
@@ -133,17 +137,17 @@ pokeStruct ptr (offset : offsets) (x :& xs) = do
 pokeStruct _ _ _ = error "np"
 
 class PeekStruct ts where
-  peekStruct :: [Int] -> Ptr a -> IO (Struct ts)
+  peekStruct' :: [Int] -> Ptr a -> IO (Struct ts)
 
 instance PeekStruct '[] where
-  peekStruct [] _ptr = pure End
-  peekStruct _ _ = error "np"
+  peekStruct' [] _ptr = pure End
+  peekStruct' _ _ = error "np"
 
 instance (Storable x, PeekStruct xs) => PeekStruct (x ': xs) where
-  peekStruct [] _ = error "np"
-  peekStruct (offset : offsets) ptr = do
+  peekStruct' [] _ = error "np"
+  peekStruct' (offset : offsets) ptr = do
     v <- peek @x (ptr `plusPtr` offset)
-    vs <- peekStruct offsets ptr
+    vs <- peekStruct' offsets ptr
     pure (v :& vs)
 
 instance
@@ -161,7 +165,7 @@ instance
     pokeStruct ptr offsets struct
   peek ptr = do
     let offsets = reifyOffsets (Proxy @(Init (Acc0 0 ts ts)))
-    peekStruct offsets ptr
+    peekStruct' offsets ptr
 
 type family
   Index
@@ -213,9 +217,14 @@ type family DeleteList (v :: Type) (sls :: [Symbol :-> Type]) :: [Symbol :-> Typ
   DeleteList (ValPtr s) (x ': xs) = x ': DeleteList (ValPtr s) xs
   DeleteList (ValPtr s) '[] = '[]
 
+type family DeleteValType (v :: Type) (vt :: ValType) :: ValType where
+  DeleteValType v (VSingleton v) = VSingleton NullPtr
+  DeleteValType v (VSingleton a) = VSingleton a
+  DeleteValType v (VStruct sls) = VStruct (DeleteList v sls)
+
 type family DeleteVal (v :: Type) (i :: DM) :: DM where
   DeleteVal v '[] = '[]
-  DeleteVal v ((k ':-> ls) ': is) = (k ':-> DeleteList v ls) ': DeleteVal v is
+  DeleteVal v ((k ':-> ls) ': is) = (k ':-> DeleteValType v ls) ': DeleteVal v is
 
 type family CheckJust (ms :: Maybe a) (sym :: Symbol) (errorMsg :: Symbol) :: Constraint where
   CheckJust (Just _) _ _ = ()
@@ -227,3 +236,6 @@ type family CheckNothing (ms :: Maybe a) (sym :: Symbol) (errorMsg :: Symbol) ::
 
 type family FromJust (s :: Maybe a) :: a where
   FromJust (Just a) = a
+
+type family FromStruct (s :: ValType) :: [Symbol :-> Type] where
+  FromStruct (VStruct a) = a

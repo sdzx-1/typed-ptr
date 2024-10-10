@@ -63,8 +63,8 @@ tcsetattr fd ptr =
 
 foo :: MPtr (At () '[]) '[]
 foo = I.do
-  At termiosPtr <- newptr "termios" Termios defaultTermios
-  At termSizePtr <- newptr "termSize" TermSize defaultTermSize
+  At termiosPtr <- newStructPtr "termios" Termios defaultTermios
+  At termSizePtr <- newStructPtr "termSize" TermSize defaultTermSize
 
   At (FD{fdFD}, _) <-
     liftm $ openFile "/dev/tty" ReadWriteMode False
@@ -75,10 +75,10 @@ foo = I.do
   At ptrStructTermSize <- toPtrStruct termSizePtr
   liftm $ c_ioctl fdFD TIOCGWINSZ ptrStructTermSize
 
-  At val <- peekptr termiosPtr
+  At val <- peekStruct termiosPtr
   liftm $ print ("termios", val)
 
-  At val1 <- peekptr termSizePtr
+  At val1 <- peekStruct termSizePtr
   liftm $ print ("termSize", val1)
 
   freeptr termSizePtr
