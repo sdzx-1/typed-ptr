@@ -35,7 +35,7 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
     => Proxy (s :: Symbol)
     -> Proxy (sts :: [Symbol :-> Type])
     -> Struct ts
-    -> (At (StructPtr s) (Insert s sts dm) ~> MPtr ia)
+    -> (At (ValPtr s) (Insert s sts dm) ~> MPtr ia)
     -> MPtr ia dm
   PeekPtr
     :: ( CheckJust (Lookup s dm) s "Peek freed ptr: "
@@ -45,7 +45,7 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
        , ReifyOffsets (Init (Acc0 0 ts ts))
        , PeekStruct ts
        )
-    => StructPtr s
+    => ValPtr s
     -> (At (Struct ts) dm ~> MPtr ia)
     -> MPtr ia dm
   PeekPtrField
@@ -59,7 +59,7 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
        , Storable val
        , KnownNat offset
        )
-    => StructPtr s
+    => ValPtr s
     -> Proxy (sym :: Symbol)
     -> Proxy (offset :: Nat)
     -> (At val dm ~> MPtr ia)
@@ -78,7 +78,7 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
        , Storable val
        , KnownNat offset
        )
-    => StructPtr s
+    => ValPtr s
     -> Proxy (sym0 :: Symbol)
     -> Proxy (offset :: Nat)
     -> val
@@ -86,9 +86,9 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
     -> MPtr ia dm
   FreePtr
     :: ( CheckJust (Lookup s dm) s ("Double free ptr: ")
-       , newdm ~ DeleteVal (StructPtr s) (Delete s dm)
+       , newdm ~ DeleteVal (ValPtr s) (Delete s dm)
        )
-    => StructPtr s
+    => ValPtr s
     -> MPtr ia newdm
     -> MPtr ia dm
   LiftM :: IO (MPtr ia dm) -> MPtr ia dm
@@ -124,7 +124,7 @@ newptr
       , ReifyOffsets (Init (Acc0 0 ts ts))
       , PeekStruct ts
       )
-  => Struct ts -> MPtr (At (StructPtr s) (Insert s sts dm)) dm
+  => Struct ts -> MPtr (At (ValPtr s) (Insert s sts dm)) dm
 newptr s sts st = NewPtr (Proxy @s) (Proxy @sts) st ireturn
 
 peekptr
@@ -135,12 +135,12 @@ peekptr
      , ReifyOffsets (Init (Acc0 0 ts ts))
      , PeekStruct ts
      )
-  => StructPtr s -> MPtr (At (Struct (CollVal (FromJust (Lookup s dm)))) dm) dm
+  => ValPtr s -> MPtr (At (Struct (CollVal (FromJust (Lookup s dm)))) dm) dm
 peekptr vs = PeekPtr vs ireturn
 
 peekptrf
   :: forall s dm ts val offset n sts
-   . StructPtr s
+   . ValPtr s
   -> forall (sym :: Symbol)
     ->( CheckJust (Lookup s dm) s "Peek freed ptr: "
       , CheckField s sym sts
@@ -162,7 +162,7 @@ peekptrf vps sym =
 
 pokeptrf
   :: forall s val dm sts ts sym val' newts newdm offset n
-   . StructPtr s
+   . ValPtr s
   -> forall (sym0 :: Symbol)
     ->val
   -> ( CheckJust (Lookup s dm) s "Poke freed ptr: "
@@ -183,10 +183,10 @@ pokeptrf vps sym0 val = PokePtrField vps (Proxy @sym0) (Proxy @offset) val (retu
 
 freeptr
   :: ( CheckJust (Lookup s dm) s ("Double free ptr: ")
-     , newdm ~ DeleteVal (StructPtr s) (Delete s dm)
+     , newdm ~ DeleteVal (ValPtr s) (Delete s dm)
      )
-  => StructPtr s
-  -> MPtr (At () (DeleteVal (StructPtr s) (Delete s dm))) dm
+  => ValPtr s
+  -> MPtr (At () (DeleteVal (ValPtr s) (Delete s dm))) dm
 freeptr vs = FreePtr vs (returnAt ())
 
 liftm :: IO a -> MPtr (At a dm) dm
@@ -196,9 +196,9 @@ toPtrStruct
   :: ( CheckJust (Lookup s dm) s "Use freed ptr: "
      , sts ~ (FromJust (Lookup s dm))
      )
-  => StructPtr s
+  => ValPtr s
   -> MPtr (At (Ptr (Struct (CollVal sts))) dm) dm
-toPtrStruct (StructPtrC ptr) = LiftM $ pure (returnAt (castPtr ptr))
+toPtrStruct (ValPtrC ptr) = LiftM $ pure (returnAt (castPtr ptr))
 
 runMPtr :: MPtr (At a dm') dm -> IO a
 runMPtr = \case
@@ -206,12 +206,12 @@ runMPtr = \case
   NewPtr _ _ (st :: Struct ts) cont -> do
     ptr <- malloc @(Struct ts)
     poke ptr st
-    runMPtr (cont (At (StructPtrC ptr)))
-  PeekPtr (StructPtrC ptr) (cont :: At (Struct ts) dma ~> MPtr (At a dmb)) -> do
+    runMPtr (cont (At (ValPtrC ptr)))
+  PeekPtr (ValPtrC ptr) (cont :: At (Struct ts) dma ~> MPtr (At a dmb)) -> do
     val <- peek @(Struct ts) (castPtr ptr)
     runMPtr (cont (At val))
   PeekPtrField
-    (StructPtrC ptr)
+    (ValPtrC ptr)
     (Proxy :: Proxy n)
     (Proxy :: Proxy offset)
     (cont :: At val dma ~> MPtr ia) -> do
@@ -219,7 +219,7 @@ runMPtr = \case
       val <- peek @val (castPtr (ptr `plusPtr` offset))
       runMPtr (cont (At val))
   PokePtrField
-    (StructPtrC ptr)
+    (ValPtrC ptr)
     (Proxy :: Proxy n)
     (Proxy :: Proxy offset)
     (val :: val)
@@ -227,7 +227,7 @@ runMPtr = \case
       let offset = fromIntegral $ natVal (Proxy @offset)
       poke @val (castPtr (ptr `plusPtr` offset)) val
       runMPtr cont
-  FreePtr (StructPtrC ptr) cont -> do
+  FreePtr (ValPtrC ptr) cont -> do
     free ptr
     runMPtr cont
   LiftM mcont -> do

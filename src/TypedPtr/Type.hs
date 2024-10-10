@@ -70,21 +70,21 @@ instance
     for_ (zip [0 .. len - 1] (take len ls)) $
       \(i, v) -> poke @t (castPtr (ptr `plusPtr` (i * (sizeOf @t undefined)))) v
 
-data StructPtr (s :: Symbol) = forall a. StructPtrC (Ptr a)
+data ValPtr (s :: Symbol) = forall a. ValPtrC (Ptr a)
 
-type instance Alignment (StructPtr s) = 8
-type instance Size (StructPtr s) = 8
+type instance Alignment (ValPtr s) = 8
+type instance Size (ValPtr s) = 8
 
-instance Show (StructPtr s) where
-  show (StructPtrC ptr) = show ptr
+instance Show (ValPtr s) where
+  show (ValPtrC ptr) = show ptr
 
-instance Storable (StructPtr a) where
+instance Storable (ValPtr a) where
   sizeOf _ = 8
   alignment _ = 8
   peek ptr = do
     val <- peek (castPtr ptr)
-    pure (StructPtrC val)
-  poke ptr (StructPtrC nptr) = poke (castPtr ptr) nptr
+    pure (ValPtrC val)
+  poke ptr (ValPtrC nptr) = poke (castPtr ptr) nptr
 
 type instance Alignment (Maybe a) = Alignment a
 type instance Size (Maybe a) = Size a + 1
@@ -180,10 +180,10 @@ type family UpdateIndex (n :: Nat) (v :: a) (ts :: [a]) :: [a] where
 
 type family Check (val' :: Type) (val :: Type) :: Constraint where
   Check NullPtr NullPtr = ()
-  Check NullPtr (StructPtr s) = ()
-  Check (StructPtr s) NullPtr = ()
-  Check (StructPtr s) (StructPtr s) = ()
-  Check (StructPtr s) (StructPtr s1) = ()
+  Check NullPtr (ValPtr s) = ()
+  Check (ValPtr s) NullPtr = ()
+  Check (ValPtr s) (ValPtr s) = ()
+  Check (ValPtr s) (ValPtr s1) = ()
   Check a a = ()
   Check a b =
     Unsatisfiable
@@ -208,10 +208,10 @@ type family LookupField (sym :: Symbol) (i :: Nat) (sts :: [Symbol :-> Type]) ::
   LookupField sym i ((_ ':-> _) ': xs) = LookupField sym (i + 1) xs
 
 type family DeleteList (v :: Type) (sls :: [Symbol :-> Type]) :: [Symbol :-> Type] where
-  DeleteList (StructPtr s) ((sym ':-> StructPtr s) ': xs) =
-    (sym ':-> NullPtr) ': DeleteList (StructPtr s) xs
-  DeleteList (StructPtr s) (x ': xs) = x ': DeleteList (StructPtr s) xs
-  DeleteList (StructPtr s) '[] = '[]
+  DeleteList (ValPtr s) ((sym ':-> ValPtr s) ': xs) =
+    (sym ':-> NullPtr) ': DeleteList (ValPtr s) xs
+  DeleteList (ValPtr s) (x ': xs) = x ': DeleteList (ValPtr s) xs
+  DeleteList (ValPtr s) '[] = '[]
 
 type family DeleteVal (v :: Type) (i :: DM) :: DM where
   DeleteVal v '[] = '[]
