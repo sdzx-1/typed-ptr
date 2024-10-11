@@ -17,7 +17,7 @@ import Data.Proxy
 import Data.Type.Map (type (:->) (..))
 import Data.Word
 import Foreign
-import GHC.TypeLits (KnownNat)
+import GHC.TypeLits (KnownNat, KnownSymbol)
 import GHC.TypeNats (natVal)
 import Test.QuickCheck
 import TypedPtr
@@ -29,13 +29,14 @@ instance
   ( Arbitrary x
   , Storable x
   , Arbitrary (Struct xs)
+  , KnownSymbol anySym
   )
-  => Arbitrary (Struct (x ': xs))
+  => Arbitrary (Struct ((anySym ':-> x) ': xs))
   where
   arbitrary = do
     x <- arbitrary
     xs <- arbitrary
-    pure (x :& xs)
+    pure ((Proxy, x) :& xs)
 
 instance (KnownNat size, Arbitrary a) => Arbitrary (Array size a) where
   arbitrary = do

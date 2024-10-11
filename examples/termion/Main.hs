@@ -17,6 +17,7 @@ module Main (main) where
 import Control.Concurrent (threadDelay)
 import Data.IFunctor (At (..))
 import qualified Data.IFunctor as I
+import Data.Proxy
 import Data.Type.Map (Insert, (:->) (..))
 import Foreign
 import Foreign.C hiding (CUChar, CULong, CUShort)
@@ -34,7 +35,7 @@ foreign import ccall unsafe "ioctl"
   c_ioctl
     :: CInt
     -> Ioctl
-    -> Ptr (Struct (CollVal TermSize))
+    -> Ptr (Struct TermSize)
     -> IO CInt
 
 foreign import ccall unsafe "isatty"
@@ -46,25 +47,25 @@ foreign import ccall unsafe "ttyname"
 foreign import ccall unsafe "tcgetattr"
   c_tcgetattr
     :: CInt
-    -> (Ptr (Struct (CollVal Termios)))
+    -> (Ptr (Struct Termios))
     -> IO Int
 
 pattern TCSANOW :: CInt
 pattern TCSANOW = 0
 
 foreign import ccall unsafe "cfmakeraw"
-  c_cfmakeraw :: (Ptr (Struct (CollVal Termios))) -> IO ()
+  c_cfmakeraw :: (Ptr (Struct Termios)) -> IO ()
 
 foreign import ccall unsafe "tcsetattr"
   c_tcsetattr
     :: CInt
     -> CInt
-    -> Ptr (Struct (CollVal Termios))
+    -> Ptr (Struct Termios)
     -> IO Int
 
 tcsetattr
   :: CInt
-  -> Ptr (Struct (CollVal Termios))
+  -> Ptr (Struct Termios)
   -> IO Int
 tcsetattr fd ptr =
   c_tcsetattr fd TCSANOW ptr
@@ -83,15 +84,28 @@ copyStruct dest source =
 foo :: MPtr (At () '[]) '[]
 foo = I.do
   let FD{fdFD} = stdout
-  At rawTerminal <- newStructPtr "rawTerminal" RawTerminal (defaultTermios :& fdFD :& End)
+  At rawTerminal <-
+    newStructPtr
+      "rawTerminal"
+      RawTerminal
+      ( (Proxy, defaultTermios)
+          :& (Proxy, fdFD)
+          :& End
+      )
   At fd <- peekStructf rawTerminal "output"
 
   -- temp termios
   At termiosPtr <- newStructPtr "termios" Termios defaultTermios
   At termiosStructPtr <- toPtrStruct termiosPtr
 
+  At val <- peekStruct termiosPtr
+  liftm $ print val
+
   -- get current termios
   liftm $ c_tcgetattr fd termiosStructPtr
+
+  At val <- peekStruct termiosPtr
+  liftm $ print val
 
   At newptr <- toPtrStructField rawTerminal "prev_ios"
   -- copy termios to rawTerminal prev_ios
@@ -99,6 +113,9 @@ foo = I.do
 
   -- set termios ptr to raw
   liftm $ c_cfmakeraw termiosStructPtr
+
+  At val <- peekStruct termiosPtr
+  liftm $ print val
   -- set stdout to raw
   liftm $ tcsetattr fd termiosStructPtr
   -- free temp termios

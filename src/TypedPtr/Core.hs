@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
@@ -34,20 +35,19 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
     -> MPtr ia dm
   NewStructPtr
     :: ( CheckNothing (Lookup s dm) s "Already existing ptr: "
-       , ts ~ CollVal sts
        , KnownNat (ListMaxAlignment 0 ts)
        , KnownNat (Last (Acc0 0 ts ts))
        , ReifyOffsets (Init (Acc0 0 ts ts))
        , PeekStruct ts
        )
     => Proxy (s :: Symbol)
-    -> Proxy (sts :: [Symbol :-> Type])
+    -> Proxy (ts :: [Symbol :-> Type])
     -> Struct ts
-    -> (At (ValPtr s) (Insert s (VStruct sts) dm) ~> MPtr ia)
+    -> (At (ValPtr s) (Insert s (VStruct ts) dm) ~> MPtr ia)
     -> MPtr ia dm
   PeekStruct
     :: ( CheckJust (Lookup s dm) s "Peek freed ptr: "
-       , ts ~ CollVal (FromStruct (FromJust (Lookup s dm)))
+       , ts ~ (FromStruct (FromJust (Lookup s dm)))
        , KnownNat (ListMaxAlignment 0 ts)
        , KnownNat (Last (Acc0 0 ts ts))
        , ReifyOffsets (Init (Acc0 0 ts ts))
@@ -58,11 +58,10 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
     -> MPtr ia dm
   PeekStructField
     :: ( CheckJust (Lookup s dm) s "Peek freed ptr: "
-       , sts ~ FromStruct (FromJust (Lookup s dm))
-       , CheckField s sym sts
-       , ts ~ CollVal sts
-       , n ~ LookupField sym 0 sts
-       , val ~ Index n ts
+       , ts ~ FromStruct (FromJust (Lookup s dm))
+       , CheckField s sym ts
+       , n ~ LookupField sym 0 ts
+       , (anySym ':-> val) ~ Index n ts
        , offset ~ Index n (Init (Acc0 0 ts ts))
        , Storable val
        , KnownNat offset
@@ -74,20 +73,19 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
     -> MPtr ia dm
   PokeStructField
     :: ( CheckJust (Lookup s dm) s "Poke freed ptr: "
-       , sts ~ FromStruct (FromJust (Lookup s dm))
-       , CheckField s sym0 sts
-       , ts ~ CollVal sts
-       , n ~ LookupField sym0 0 sts
-       , (sym ':-> val') ~ Index n sts
+       , ts ~ FromStruct (FromJust (Lookup s dm))
+       , CheckField s sym ts
+       , n ~ LookupField sym 0 ts
+       , (anySym ':-> val') ~ Index n ts
        , Check val' val
-       , newts ~ UpdateIndex n (sym ':-> val) sts
+       , newts ~ UpdateIndex n (anySym ':-> val) ts
        , newdm ~ InsertOverwriting s (VStruct newts) dm
        , offset ~ Index n (Init (Acc0 0 ts ts))
        , Storable val
        , KnownNat offset
        )
     => ValPtr s
-    -> Proxy (sym0 :: Symbol)
+    -> Proxy (sym :: Symbol)
     -> Proxy (offset :: Nat)
     -> val
     -> MPtr ia newdm
@@ -134,43 +132,41 @@ newSingletonPtr s t = NewSingletonPtr (Proxy @s) t ireturn
 
 newStructPtr
   :: forall (s :: Symbol)
-    ->forall (sts :: [Symbol :-> Type])
+    ->forall (ts :: [Symbol :-> Type])
     ->( CheckNothing (Lookup s dm) s "Already existing ptr: "
-      , ts ~ CollVal sts
       , KnownNat (ListMaxAlignment 0 ts)
       , KnownNat (Last (Acc0 0 ts ts))
       , ReifyOffsets (Init (Acc0 0 ts ts))
       , PeekStruct ts
       )
-  => Struct ts -> MPtr (At (ValPtr s) (Insert s (VStruct sts) dm)) dm
-newStructPtr s sts st = NewStructPtr (Proxy @s) (Proxy @sts) st ireturn
+  => Struct ts -> MPtr (At (ValPtr s) (Insert s (VStruct ts) dm)) dm
+newStructPtr s ts st = NewStructPtr (Proxy @s) (Proxy @ts) st ireturn
 
 peekStruct
   :: ( CheckJust (Lookup s dm) s "Peek freed ptr: "
-     , ts ~ CollVal (FromStruct (FromJust (Lookup s dm)))
+     , ts ~ (FromStruct (FromJust (Lookup s dm)))
      , KnownNat (ListMaxAlignment 0 ts)
      , KnownNat (Last (Acc0 0 ts ts))
      , ReifyOffsets (Init (Acc0 0 ts ts))
      , PeekStruct ts
      )
-  => ValPtr s -> MPtr (At (Struct (CollVal (FromStruct (FromJust (Lookup s dm))))) dm) dm
+  => ValPtr s -> MPtr (At (Struct ((FromStruct (FromJust (Lookup s dm))))) dm) dm
 peekStruct vs = PeekStruct vs ireturn
 
 peekStructf
-  :: forall s dm ts val offset n sts
+  :: forall s dm ts val offset n anySym
    . ValPtr s
   -> forall (sym :: Symbol)
     ->( CheckJust (Lookup s dm) s "Peek freed ptr: "
-      , CheckField s sym sts
-      , sts ~ FromStruct (FromJust (Lookup s dm))
-      , ts ~ CollVal sts
-      , n ~ LookupField sym 0 sts
-      , val ~ Index n ts
+      , CheckField s sym ts
+      , ts ~ FromStruct (FromJust (Lookup s dm))
+      , n ~ LookupField sym 0 ts
+      , (anySym ':-> val) ~ Index n ts
       , offset ~ Index n (Init (Acc0 0 ts ts))
       , Storable val
       , KnownNat offset
       )
-  => MPtr (At (Index n ts) dm) dm
+  => MPtr (At val dm) dm
 peekStructf vps sym =
   PeekStructField
     vps
@@ -179,25 +175,24 @@ peekStructf vps sym =
     ireturn
 
 pokeStructf
-  :: forall s val dm sts ts sym val' newts newdm offset n
+  :: forall s val dm ts anySym val' newts newdm offset n
    . ValPtr s
-  -> forall (sym0 :: Symbol)
+  -> forall (sym :: Symbol)
     ->val
   -> ( CheckJust (Lookup s dm) s "Poke freed ptr: "
-     , CheckField s sym0 sts
-     , sts ~ FromStruct (FromJust (Lookup s dm))
-     , ts ~ CollVal sts
-     , n ~ LookupField sym0 0 sts
-     , (sym ':-> val') ~ Index n sts
+     , ts ~ FromStruct (FromJust (Lookup s dm))
+     , CheckField s sym ts
+     , n ~ LookupField sym 0 ts
+     , (anySym ':-> val') ~ Index n ts
      , Check val' val
-     , newts ~ UpdateIndex n (sym ':-> val) sts
+     , newts ~ UpdateIndex n (anySym ':-> val) ts
      , newdm ~ InsertOverwriting s (VStruct newts) dm
      , offset ~ Index n (Init (Acc0 0 ts ts))
      , Storable val
      , KnownNat offset
      )
   => MPtr (At () newdm) dm
-pokeStructf vps sym0 val = PokeStructField vps (Proxy @sym0) (Proxy @offset) val (returnAt ())
+pokeStructf vps sym val = PokeStructField vps (Proxy @sym) (Proxy @offset) val (returnAt ())
 
 freeptr
   :: ( CheckJust (Lookup s dm) s ("Double free ptr: ")
@@ -212,22 +207,21 @@ liftm ma = LiftM (ma >>= pure . returnAt)
 
 toPtrStruct
   :: ( CheckJust (Lookup s dm) s "Use freed ptr: "
-     , sts ~ FromStruct (FromJust (Lookup s dm))
+     , ts ~ FromStruct (FromJust (Lookup s dm))
      )
   => ValPtr s
-  -> MPtr (At (Ptr (Struct (CollVal sts))) dm) dm
+  -> MPtr (At (Ptr (Struct ts)) dm) dm
 toPtrStruct (ValPtrC ptr) = LiftM $ pure (returnAt (castPtr ptr))
 
 toPtrStructField
-  :: forall t s dm sts n offset ts
+  :: forall t s dm n offset ts anySym
    . (KnownNat offset)
   => ValPtr s
   -> forall (field :: Symbol)
     ->( CheckJust (Lookup s dm) s "Use freed ptr: "
-      , sts ~ FromStruct (FromJust (Lookup s dm))
-      , ts ~ CollVal sts
-      , n ~ LookupField field 0 sts
-      , t ~ Index n ts
+      , ts ~ FromStruct (FromJust (Lookup s dm))
+      , n ~ LookupField field 0 ts
+      , (anySym ':-> t) ~ Index n ts
       , offset ~ Index n (Init (Acc0 0 ts ts))
       )
   => MPtr (At (Ptr t) dm) dm

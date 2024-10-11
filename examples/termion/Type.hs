@@ -5,6 +5,7 @@
 
 module Type where
 
+import Data.Proxy
 import Data.Type.Map (type (:->) ((:->)))
 import Foreign
 import Foreign.C (CInt)
@@ -45,20 +46,35 @@ type instance Alignment CInt = 4
 type instance Size CInt = 4
 
 type RawTerminal =
-  '[ "prev_ios" ':->  Struct (CollVal Termios)
+  '[ "prev_ios" ':-> Struct Termios
    , "output" ':-> CInt -- stdout fd
    ]
 
-defaultRawTerminal :: Struct (CollVal RawTerminal)
-defaultRawTerminal = defaultTermios :& 0 :& End
+defaultRawTerminal :: Struct RawTerminal
+defaultRawTerminal =
+  (Proxy, defaultTermios)
+    :& (Proxy, 0)
+    :& End
 
-defaultTermSize :: Struct (CollVal TermSize)
+defaultTermSize :: Struct TermSize
 defaultTermSize =
-  80 :& 60 :& 0 :& 0 :& End
+  (Proxy, 80)
+    :& (Proxy, 60)
+    :& (Proxy, 0)
+    :& (Proxy, 0)
+    :& End
 
-defaultTermios :: Struct (CollVal Termios)
+defaultTermios :: Struct Termios
 defaultTermios =
-  0 :& 0 :& 0 :& 0 :& 0 :& (ArrayC [0 ..]) :& 0 :& 0 :& End
+  (Proxy, 0)
+    :& (Proxy, 0)
+    :& (Proxy, 0)
+    :& (Proxy, 0)
+    :& (Proxy, 0)
+    :& (Proxy, ArrayC [0 ..])
+    :& (Proxy, 0)
+    :& (Proxy, 0)
+    :& End
 
 pattern TIOCGWINSZ :: Ioctl
 pattern TIOCGWINSZ = 0x5413

@@ -42,9 +42,8 @@ main = hspec $ do
       property (prop_storableStruct TestNestStruct)
 
 prop_storableStruct
-  :: forall (sts :: [Symbol :-> Type])
-    ->( ts ~ CollVal sts
-      , Arbitrary (Struct ts)
+  :: forall (ts :: [Symbol :-> Type])
+    ->( Arbitrary (Struct ts)
       , All Show ts
       , All Eq ts
       , (KnownNat (ListMaxAlignment 0 ts))
@@ -53,9 +52,9 @@ prop_storableStruct
       , PeekStruct ts
       )
   => Property
-prop_storableStruct sts = monadicIO $ do
-  str <- pick (arbitrary @(Struct (CollVal sts)))
-  ptr <- run $ malloc @(Struct (CollVal sts))
+prop_storableStruct ts = monadicIO $ do
+  str <- pick (arbitrary @(Struct ts))
+  ptr <- run $ malloc @(Struct ts)
   run $ poke ptr str
   str1 <- run $ peek ptr
   run $ free ptr
@@ -112,7 +111,11 @@ type TestNestStruct =
   '[ "field1" ':-> Char
    , "field2" ':-> Array 2 Bool
    , "field3" ':-> Maybe Int
-   , "field4" ':-> Struct [Int, Bool]
+   , "field4"
+      ':-> Struct
+            '[ "f1" ':-> Int
+             , "f2" ':-> Bool
+             ]
    , "field5" ':-> Float
    , "field6" ':-> Word8
    , "field7" ':-> Array 7 Word16

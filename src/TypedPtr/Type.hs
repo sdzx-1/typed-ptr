@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PolyKinds #-}
@@ -108,19 +109,23 @@ instance (Storable a) => Storable (Maybe a) where
 
 infixr 4 :&
 
-data Struct :: [Type] -> Type where
+data Struct :: [Symbol :-> Type] -> Type where
   End :: Struct '[]
-  (:&) :: (Storable a) => a -> Struct as -> Struct (a ': as)
+  (:&)
+    :: (Storable a, KnownSymbol s)
+    => (Proxy (s :: Symbol), a)
+    -> Struct as
+    -> Struct ((s ':-> a) ': as)
 
-type family All (c :: Type -> Constraint) (ts :: [Type]) :: Constraint where
+type family All (c :: Type -> Constraint) (ts :: [Symbol :-> Type]) :: Constraint where
   All c '[] = ()
-  All c (t ': ts) = (c t, All c ts)
+  All c ((s ':-> t) ': ts) = (c t, All c ts)
 
 instance (All Show ts) => Show (Struct ts) where
   show = \case
     End -> "{}"
-    v :& End -> "{" ++ show v ++ "}"
-    v :& vs -> "{" ++ show v ++ ", " ++ (drop 1 $ show vs)
+    (ps, v) :& End -> "{" ++ symbolVal ps ++ ": " ++ show v ++ "}"
+    (ps, v) :& vs -> "{" ++ symbolVal ps ++ ": " ++ show v ++ ", " ++ (drop 1 $ show vs)
 
 instance (All Eq ts) => Eq (Struct ts) where
   End == End = True
@@ -131,7 +136,7 @@ type instance Size (Struct xs) = Last (Acc0 0 xs xs)
 
 pokeStruct :: Ptr a -> [Int] -> Struct ts -> IO ()
 pokeStruct _ [] End = pure ()
-pokeStruct ptr (offset : offsets) (x :& xs) = do
+pokeStruct ptr (offset : offsets) ((_, x) :& xs) = do
   poke (castPtr (ptr `plusPtr` offset)) x
   pokeStruct ptr offsets xs
 pokeStruct _ _ _ = error "np"
@@ -143,12 +148,18 @@ instance PeekStruct '[] where
   peekStruct' [] _ptr = pure End
   peekStruct' _ _ = error "np"
 
-instance (Storable x, PeekStruct xs) => PeekStruct (x ': xs) where
+instance
+  ( Storable x
+  , PeekStruct xs
+  , KnownSymbol s
+  )
+  => PeekStruct ((s ':-> x) ': xs)
+  where
   peekStruct' [] _ = error "np"
   peekStruct' (offset : offsets) ptr = do
     v <- peek @x (ptr `plusPtr` offset)
     vs <- peekStruct' offsets ptr
-    pure (v :& vs)
+    pure ((Proxy, v) :& vs)
 
 instance
   ( KnownNat (ListMaxAlignment 0 ts)
@@ -201,13 +212,13 @@ type family CollVal (ls :: [Symbol :-> Type]) :: [Type] where
   CollVal '[] = '[]
   CollVal ((_ ':-> v) ': xs) = v ': CollVal xs
 
-type family CheckField (ptr :: Symbol) (sym :: Symbol) (sts :: [Symbol :-> Type]) :: Constraint where
+type family CheckField (ptr :: Symbol) (sym :: Symbol) (sts :: [Symbol :-> a]) :: Constraint where
   CheckField ptr sym '[] =
     Unsatisfiable (Text "ptr: " :<>: ShowType ptr :<>: Text " not have field: " :<>: ShowType sym)
   CheckField ptr sym ((sym ':-> _) ': xs) = ()
   CheckField ptr sym ((_ ':-> _) ': xs) = CheckField ptr sym xs
 
-type family LookupField (sym :: Symbol) (i :: Nat) (sts :: [Symbol :-> Type]) :: Nat where
+type family LookupField (sym :: Symbol) (i :: Nat) (sts :: [Symbol :-> a]) :: Nat where
   LookupField sym i ((sym ':-> _) ': xs) = i
   LookupField sym i ((_ ':-> _) ': xs) = LookupField sym (i + 1) xs
 

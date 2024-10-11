@@ -9,9 +9,10 @@ module TypedPtr.Storable where
 
 import Data.Kind
 import Data.Proxy
+import Data.Type.Map ((:->) (..))
 import Data.Type.Ord
 import Foreign
-import GHC.TypeNats
+import GHC.TypeLits
 
 type family Alignment (t :: Type) :: Nat
 type family Size (t :: Type) :: Nat
@@ -67,13 +68,13 @@ aligned = offset + padding
 type family Padding (offset :: Nat) (align :: Nat) :: Nat where
   Padding offset align = (align - (offset `Mod` align)) `Mod` align
 
-type family ListMaxAlignment (s :: Nat) (xs :: [Type]) :: Nat where
+type family ListMaxAlignment (s :: Nat) (xs :: [Symbol :-> Type]) :: Nat where
   ListMaxAlignment s '[] = s
-  ListMaxAlignment s (x ': xs) = ListMaxAlignment (Max s (Alignment x)) xs
+  ListMaxAlignment s ((_ ':-> x) ': xs) = ListMaxAlignment (Max s (Alignment x)) xs
 
-type family Acc0 (offset :: Nat) (xs :: [Type]) (bxs :: [Type]) :: [Nat] where
+type family Acc0 (offset :: Nat) (xs :: [Symbol :-> Type]) (bxs :: [Symbol :-> Type]) :: [Nat] where
   Acc0 offset '[] bxs = '[offset + Padding offset (ListMaxAlignment 0 bxs)]
-  Acc0 offset (x ': xs) bxs =
+  Acc0 offset ((_ ':-> x) ': xs) bxs =
     (offset + Padding offset (Alignment x))
       ': Acc0 (offset + Padding offset (Alignment x) + Size x) xs bxs
 
@@ -86,8 +87,8 @@ type family Init (xs :: [Nat]) :: [Nat] where
   Init (x ': xs) = x ': Init xs
 
 -- | Struct size and field offsets
-type family Acc (xs :: [Type]) :: (Nat, [Nat]) where
-  Acc xs = '(Last (Acc0 0 xs xs), Init (Acc0 0 xs xs))
+-- type family Acc (xs :: [Type]) :: (Nat, [Nat]) where
+--   Acc xs = '(Last (Acc0 0 xs xs), Init (Acc0 0 xs xs))
 
 class ReifyOffsets (s :: [Nat]) where
   reifyOffsets :: Proxy s -> [Int]
