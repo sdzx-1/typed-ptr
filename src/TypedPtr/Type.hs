@@ -20,6 +20,7 @@ import Data.Proxy
 import Data.Traversable (for)
 import Data.Type.Map (Map, type (:->) (..))
 import Foreign
+import GHC.Records
 import GHC.TypeError (Unsatisfiable)
 import GHC.TypeLits
 import TypedPtr.Storable
@@ -79,6 +80,12 @@ data ValPtr (s :: Symbol) = forall a. ValPtrC (Ptr a)
 
 type instance Alignment (ValPtr s) = 8
 type instance Size (ValPtr s) = 8
+
+instance
+  (s2 ~ (AppendSymbol s1 (AppendSymbol "." s)))
+  => HasField s (ValPtr s1) (ValPtr s2)
+  where
+  getField (ValPtrC ptr) = ValPtrC ptr
 
 instance Show (ValPtr s) where
   show (ValPtrC ptr) = show ptr
