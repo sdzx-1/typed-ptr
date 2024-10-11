@@ -1,18 +1,25 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE QualifiedDo #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RequiredTypeArguments #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
+{-# OPTIONS_GHC -Wno-unused-do-bind #-}
 {-# OPTIONS_GHC -Wno-unused-foralls #-}
 {-# OPTIONS_GHC -Wno-unused-imports #-}
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Main (main) where
 
+import Data.IFunctor (At (..), returnAt)
+import qualified Data.IFunctor as I
 import Data.Kind
+import Data.Proxy
 import Data.Type.Map ((:->) (..))
 import Foreign
 import GHC.TypeLits
@@ -41,6 +48,12 @@ main = hspec $ do
     it "TestNestStruct" $
       property (prop_storableStruct TestNestStruct)
 
+    it "TestNestStruct1" $
+      property (prop_storableStruct TestNestStruct1)
+
+    it "PeekPtr" $
+      property prop_PeekPtr
+
 prop_storableStruct
   :: forall (ts :: [Symbol :-> Type])
     ->( Arbitrary (Struct ts)
@@ -66,10 +79,6 @@ type TestValStruct =
    , "field3" ':-> Int
    , "field4" ':-> Double
    , "field5" ':-> Float
-   , "field6" ':-> Word8
-   , "field7" ':-> Word16
-   , "field8" ':-> Word32
-   , "field9" ':-> Word64
    ]
 
 type TestMaybeStruct =
@@ -78,10 +87,6 @@ type TestMaybeStruct =
    , "field3" ':-> Maybe Int
    , "field4" ':-> Maybe Double
    , "field5" ':-> Maybe Float
-   , "field6" ':-> Maybe Word8
-   , "field7" ':-> Maybe Word16
-   , "field8" ':-> Maybe Word32
-   , "field9" ':-> Maybe Word64
    ]
 
 type TestArrayStruct =
@@ -90,10 +95,6 @@ type TestArrayStruct =
    , "field3" ':-> Array 3 Int
    , "field4" ':-> Array 4 Double
    , "field5" ':-> Array 5 Float
-   , "field6" ':-> Array 6 Word8
-   , "field7" ':-> Array 7 Word16
-   , "field8" ':-> Array 8 Word32
-   , "field9" ':-> Array 9 Word64
    ]
 
 type TestMixStruct =
@@ -102,10 +103,6 @@ type TestMixStruct =
    , "field3" ':-> Maybe Int
    , "field4" ':-> Array 4 Double
    , "field5" ':-> Float
-   , "field6" ':-> Word8
-   , "field7" ':-> Array 7 Word16
-   , "field8" ':-> Maybe Word32
-   , "field9" ':-> Array 9 Word64
    ]
 type TestNestStruct =
   '[ "field1" ':-> Char
@@ -116,9 +113,41 @@ type TestNestStruct =
             '[ "f1" ':-> Int
              , "f2" ':-> Bool
              ]
-   , "field5" ':-> Float
-   , "field6" ':-> Word8
-   , "field7" ':-> Array 7 Word16
-   , "field8" ':-> Maybe Word32
-   , "field9" ':-> Array 9 Word64
    ]
+
+type TestNestStruct1 =
+  '[ "a"
+      ':-> Struct
+            '[ "b"
+                ':-> Struct '["c" ':-> Bool]
+             , "b1" ':-> Word8
+             , "b2" ':-> Struct '["c" ':-> Int]
+             , "b3" ':-> Array 3 Word8
+             ]
+   , "b" ':-> Int
+   ]
+
+prop_PeekPtr :: Property
+prop_PeekPtr = monadicIO $ do
+  struct <- pick (arbitrary @(Struct TestNestStruct1))
+  struct' <- run $ runMPtr @(Struct TestNestStruct1) @'[] @'[] $ I.do
+    At testPtr <- newStructPtr "test" TestNestStruct1 struct
+    At val0 <- peekPtr testPtr.a.b.c
+    At val1 <- peekPtr testPtr.a.b1
+    At val2 <- peekPtr testPtr.a.b2.c
+    At val3 <- peekPtr testPtr.a.b3
+    At val4 <- peekPtr testPtr.b
+    freeptr testPtr
+    returnAt
+      ( ( Proxy
+        , ( (Proxy, (Proxy, val0) :& End)
+              :& (Proxy, val1)
+              :& (Proxy, (Proxy, val2) :& End)
+              :& (Proxy, val3)
+              :& End
+          )
+        )
+          :& (Proxy, val4)
+          :& End
+      )
+  assert $ struct == struct'

@@ -257,3 +257,46 @@ type family FromJust (s :: Maybe a) :: a where
 
 type family FromStruct (s :: ValType) :: [Symbol :-> Type] where
   FromStruct (VStruct a) = a
+
+type family AppendChar (a :: Symbol) (b :: Char) :: Symbol where
+  AppendChar s c = AppendSymbol s (ConsSymbol c "")
+
+type family
+  SplitSymbol'
+    (s :: Maybe (Char, Symbol))
+    (tmp :: Symbol)
+    :: [Symbol]
+  where
+  SplitSymbol' Nothing tmp = '[tmp]
+  SplitSymbol' (Just '( '.', sym)) tmp =
+    tmp ': SplitSymbol' (UnconsSymbol sym) ""
+  SplitSymbol' (Just '(v, sym)) tmp =
+    SplitSymbol' (UnconsSymbol sym) (AppendChar tmp v)
+
+type family SplitSymbol (source :: Symbol) :: [Symbol] where
+  SplitSymbol source = SplitSymbol' (UnconsSymbol source) ""
+
+type family
+  LookupField1
+    (sym :: Symbol)
+    (offset :: Nat)
+    (ts :: [Symbol :-> Type])
+    :: (Nat, Type)
+  where
+  LookupField1 sym offset '[] =
+    TypeError (Text "Not have field: " :<>: ShowType sym)
+  LookupField1 sym offset ((sym ':-> t) ': xs) = '(offset + Padding offset (Alignment t), t)
+  LookupField1 sym offset ((_ ':-> t) ': xs) =
+    LookupField1 sym (offset + Padding offset (Alignment t) + Size t) xs
+
+type family
+  FieldIndex
+    (fields :: [Symbol])
+    (offAndt :: (Nat, Type))
+    :: (Nat, Type)
+  where
+  FieldIndex '[] '(offset, t) = '(offset, t)
+  FieldIndex (x ': xs) '(offset, (Struct ts)) =
+    FieldIndex xs (LookupField1 x offset ts)
+  FieldIndex (x ': xs) '(_, t) =
+    TypeError (ShowType t :<>: Text ": not have sub field")
