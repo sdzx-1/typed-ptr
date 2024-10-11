@@ -4,6 +4,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE QualifiedDo #-}
 {-# LANGUAGE RankNTypes #-}
@@ -84,32 +85,34 @@ copyStruct dest source =
 foo :: MPtr (At () '[]) '[]
 foo = I.do
   let FD{fdFD} = stdout
-  At rawTerminal <-
-    newStructPtr
-      "rawTerminal"
-      RawTerminal
-      ( (Proxy, defaultTermios)
-          :& (Proxy, fdFD)
-          :& End
-      )
-  At fd <- peekStructf rawTerminal "output"
+  -- At rawTerminal <-
+  --   newStructPtr
+  --     "rawTerminal"
+  --     RawTerminal
+  --     ( (Proxy, defaultTermios)
+  --         :& (Proxy, fdFD)
+  --         :& End
+  --     )
+  -- At fd <- peekStructf rawTerminal "output"
 
   -- temp termios
   At termiosPtr <- newStructPtr "termios" Termios defaultTermios
   At termiosStructPtr <- toPtrStruct termiosPtr
 
+  -- let subPtr = rawTerminal.prev_ios
+
   At val <- peekStruct termiosPtr
   liftm $ print val
 
   -- get current termios
-  liftm $ c_tcgetattr fd termiosStructPtr
+  -- liftm $ c_tcgetattr fd termiosStructPtr
 
   At val <- peekStruct termiosPtr
   liftm $ print val
 
-  At newptr <- toPtrStructField rawTerminal "prev_ios"
+  -- At newptr <- toPtrStructField rawTerminal "prev_ios"
   -- copy termios to rawTerminal prev_ios
-  liftm $ copyStruct newptr termiosStructPtr
+  -- liftm $ copyStruct newptr termiosStructPtr
 
   -- set termios ptr to raw
   liftm $ c_cfmakeraw termiosStructPtr
@@ -117,14 +120,14 @@ foo = I.do
   At val <- peekStruct termiosPtr
   liftm $ print val
   -- set stdout to raw
-  liftm $ tcsetattr fd termiosStructPtr
+  -- liftm $ tcsetattr fd termiosStructPtr
   -- free temp termios
   freeptr termiosPtr
 
   -- stdout restore
-  liftm $ tcsetattr fd newptr
+  -- liftm $ tcsetattr fd newptr
 
-  freeptr rawTerminal
+  -- freeptr rawTerminal
   liftm $ threadDelay 3000000
 
 -- let bufferSize = 100
