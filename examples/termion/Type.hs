@@ -45,16 +45,16 @@ type Termios =
 type instance Alignment CInt = 4
 type instance Size CInt = 4
 
--- type RawTerminal =
---   '[ "prev_ios" ':-> Struct Termios
---    , "output" ':-> CInt -- stdout fd
---    ]
+type RawTerminal =
+  '[ "prev_ios" ':-> Struct Termios
+   , "output" ':-> CInt -- stdout fd
+   ]
 
--- defaultRawTerminal :: Struct RawTerminal
--- defaultRawTerminal =
---   (Proxy, defaultTermios)
---     :& (Proxy, 0)
---     :& End
+defaultRawTerminal :: Struct RawTerminal
+defaultRawTerminal =
+  (Proxy, defaultTermios)
+    :& (Proxy, 0)
+    :& End
 
 defaultTermSize :: Struct TermSize
 defaultTermSize =

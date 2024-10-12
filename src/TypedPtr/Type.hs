@@ -273,6 +273,10 @@ type family
   SplitSymbol' (Just '(v, sym)) tmp =
     SplitSymbol' (UnconsSymbol sym) (AppendChar tmp v)
 
+type family NotEq (res :: Ordering) :: Constraint where
+  NotEq EQ = Unsatisfiable (Text "The are the same!")
+  NotEq _ = ()
+
 type family SplitSymbol (source :: Symbol) :: [Symbol] where
   SplitSymbol source = SplitSymbol' (UnconsSymbol source) ""
 
