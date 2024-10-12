@@ -300,3 +300,31 @@ type family
     FieldIndex xs (LookupField1 x offset ts)
   FieldIndex (x ': xs) '(_, t) =
     TypeError (ShowType t :<>: Text ": not have sub field")
+
+type family Connect (xs :: [a]) (ys :: [a]) :: [a] where
+  Connect '[] ys = ys
+  Connect (x ': xs) ys = x ': (Connect xs ys)
+
+type family
+  UpdateField
+    (syms :: [Symbol])
+    (coll :: [Symbol :-> Type])
+    (ts :: Type)
+    (val :: Type)
+    :: Type
+  where
+  UpdateField syms coll (Struct '[]) val =
+    TypeError (Text "Not have field: " :<>: ShowType syms)
+  UpdateField '[] coll old val = val
+  UpdateField (sym : syms) coll (Struct ((sym ':-> t) ': xs)) val =
+    Struct
+      ( Connect
+          coll
+          ( (sym ':-> UpdateField syms '[] t val)
+              ': xs
+          )
+      )
+  UpdateField (sym : syms) coll (Struct (x ': xs)) val =
+    UpdateField (sym : syms) (Connect coll '[x]) (Struct xs) val
+  UpdateField _ _ otherType _ =
+    TypeError (ShowType otherType :<>: Text ": not have sub field")

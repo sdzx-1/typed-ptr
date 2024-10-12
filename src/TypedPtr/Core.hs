@@ -68,6 +68,23 @@ data MPtr (ia :: DM -> Type) (b :: DM) where
     -> Proxy offset
     -> (At val dm ~> MPtr ia)
     -> MPtr ia dm
+  PokePtr
+    :: ( (hs ': syms) ~ SplitSymbol s
+       , CheckJust (Lookup hs dm) hs "Poke freed ptr: "
+       , VStruct ts ~ FromJust (Lookup hs dm)
+       , sts ~ Struct ts
+       , '(offset, val') ~ FieldIndex syms '(0, sts)
+       , KnownNat offset
+       , Check val' val
+       , Struct newts ~ UpdateField syms '[] sts val
+       , newdm ~ InsertOverwriting hs (VStruct newts) dm
+       , Storable val
+       )
+    => ValPtr s
+    -> Proxy (offset :: Nat)
+    -> val
+    -> MPtr ia newdm
+    -> MPtr ia dm
   PeekStructField
     :: ( CheckJust (Lookup s dm) s "Peek freed ptr: "
        , ts ~ FromStruct (FromJust (Lookup s dm))
@@ -118,6 +135,7 @@ instance IFunctor MPtr where
     NewStructPtr s sts st contF -> NewStructPtr s sts st (imap f . contF)
     PeekStruct vs contF -> PeekStruct vs (imap f . contF)
     PeekPtr vs proxy contF -> PeekPtr vs proxy (imap f . contF)
+    PokePtr vs proxy val cont -> PokePtr vs proxy val (imap f cont)
     PeekStructField vs n offset contF -> PeekStructField vs n offset (imap f . contF)
     PokeStructField vs n offset val cont -> PokeStructField vs n offset val (imap f cont)
     FreePtr vs cont -> FreePtr vs (imap f cont)
@@ -131,6 +149,7 @@ instance IMonad MPtr where
     NewStructPtr s sts st contF -> NewStructPtr s sts st (ibind f . contF)
     PeekStruct vs contF -> PeekStruct vs (ibind f . contF)
     PeekPtr vs proxy contF -> PeekPtr vs proxy (ibind f . contF)
+    PokePtr vs proxy val cont -> PokePtr vs proxy val (ibind f cont)
     PeekStructField vs n offset contF -> PeekStructField vs n offset (ibind f . contF)
     PokeStructField vs n offset val cont -> PokeStructField vs n offset val (ibind f cont)
     FreePtr vs cont -> FreePtr vs (ibind f cont)
@@ -167,7 +186,7 @@ peekStruct
   => ValPtr s -> MPtr (At (Struct ((FromStruct (FromJust (Lookup s dm))))) dm) dm
 peekStruct vs = PeekStruct vs ireturn
 
-peekPtr
+peekptr
   :: forall offset s hs dm syms ts val
    . ( (hs ': syms) ~ SplitSymbol s
      , CheckJust (Lookup hs dm) hs "Peek freed ptr: "
@@ -177,7 +196,25 @@ peekPtr
      , Storable val
      )
   => ValPtr s -> MPtr (At val dm) dm
-peekPtr vps = PeekPtr vps (Proxy @offset) ireturn
+peekptr vps = PeekPtr vps (Proxy @offset) ireturn
+
+pokeptr
+  :: forall hs syms s ts sts val' offset val newts newdm dm
+   . ( (hs ': syms) ~ SplitSymbol s
+     , CheckJust (Lookup hs dm) hs "Poke freed ptr: "
+     , VStruct ts ~ FromJust (Lookup hs dm)
+     , sts ~ Struct ts
+     , '(offset, val') ~ FieldIndex syms '(0, sts)
+     , KnownNat offset
+     , Check val' val
+     , Struct newts ~ UpdateField syms '[] sts val
+     , newdm ~ InsertOverwriting hs (VStruct newts) dm
+     , Storable val
+     )
+  => ValPtr s
+  -> val
+  -> MPtr (At () newdm) dm
+pokeptr vps val = PokePtr vps (Proxy @offset) val (returnAt ())
 
 peekStructf
   :: forall s dm ts val offset n anySym
@@ -272,6 +309,10 @@ runMPtr = \case
     let offset = fromIntegral $ natVal (Proxy @offset)
     val <- peek @val (castPtr (ptr `plusPtr` offset))
     runMPtr (cont (At val))
+  PokePtr (ValPtrC ptr) (Proxy :: Proxy offset) val0 (cont) -> do
+    let offset = fromIntegral $ natVal (Proxy @offset)
+    poke (castPtr (ptr `plusPtr` offset)) val0
+    runMPtr cont
   PeekStructField
     (ValPtrC ptr)
     (Proxy :: Proxy n)

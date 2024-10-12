@@ -9,6 +9,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
 {-# OPTIONS_GHC -Wno-unused-foralls #-}
 {-# OPTIONS_GHC -Wno-unused-imports #-}
@@ -52,7 +53,10 @@ main = hspec $ do
       property (prop_storableStruct TestNestStruct1)
 
     it "PeekPtr" $
-      property prop_PeekPtr
+      property prop_peekptr
+
+    it "PokePtr" $
+      property prop_pokeptr
 
 prop_storableStruct
   :: forall (ts :: [Symbol :-> Type])
@@ -127,16 +131,16 @@ type TestNestStruct1 =
    , "b" ':-> Int
    ]
 
-prop_PeekPtr :: Property
-prop_PeekPtr = monadicIO $ do
+prop_peekptr :: Property
+prop_peekptr = monadicIO $ do
   struct <- pick (arbitrary @(Struct TestNestStruct1))
   struct' <- run $ runMPtr @(Struct TestNestStruct1) @'[] @'[] $ I.do
     At testPtr <- newStructPtr "test" TestNestStruct1 struct
-    At val0 <- peekPtr testPtr.a.b.c
-    At val1 <- peekPtr testPtr.a.b1
-    At val2 <- peekPtr testPtr.a.b2.c
-    At val3 <- peekPtr testPtr.a.b3
-    At val4 <- peekPtr testPtr.b
+    At val0 <- peekptr testPtr.a.b.c
+    At val1 <- peekptr testPtr.a.b1
+    At val2 <- peekptr testPtr.a.b2.c
+    At val3 <- peekptr testPtr.a.b3
+    At val4 <- peekptr testPtr.b
     freeptr testPtr
     returnAt
       ( ( Proxy
@@ -150,4 +154,29 @@ prop_PeekPtr = monadicIO $ do
           :& (Proxy, val4)
           :& End
       )
+  assert $ struct == struct'
+
+prop_pokeptr :: Property
+prop_pokeptr = monadicIO $ do
+  struct <- pick (arbitrary @(Struct TestNestStruct1))
+  struct' <-
+    run $ runMPtr @(Struct TestNestStruct1) @'[] @'[] $ I.do
+      At testPtr <- newStructPtr "test" TestNestStruct1 struct
+      At val <- peekptr testPtr.a.b.c
+      pokeptr testPtr.a.b.c val
+      At val <- peekptr testPtr.a.b
+      pokeptr testPtr.a.b val
+      At val <- peekptr testPtr.a.b1
+      pokeptr testPtr.a.b1 val
+      At val <- peekptr testPtr.a.b2
+      pokeptr testPtr.a.b2 val
+      At val <- peekptr testPtr.a.b2.c
+      pokeptr testPtr.a.b2.c val
+      At val <- peekptr testPtr.a.b3
+      pokeptr testPtr.a.b3 val
+      At val <- peekptr testPtr.a.b
+      pokeptr testPtr.a.b val
+      At val1 <- peekptr testPtr
+      freeptr testPtr
+      returnAt val1
   assert $ struct == struct'
