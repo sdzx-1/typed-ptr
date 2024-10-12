@@ -19,7 +19,7 @@ import Control.Concurrent (threadDelay)
 import Data.IFunctor (At (..))
 import qualified Data.IFunctor as I
 import Data.Proxy
-import Data.Type.Map (Insert, (:->) (..))
+import Data.Type.Map (Insert, Lookup, (:->) (..))
 import Foreign
 import Foreign.C hiding (CUChar, CULong, CUShort)
 import GHC.IO.Device (IODeviceType (..))
@@ -79,20 +79,28 @@ foo = I.do
       "rawTerminal"
       RawTerminal
       ((Proxy, defaultTermios) :& (Proxy, fdFD) :& End)
+  printptr "init RawTerminal" rawTerminal
 
   At fd <- peekptr rawTerminal.output
   -- temp termios
   At termiosPtr <- newStructPtr "termios" Termios defaultTermios
+  printptr "init Termios" termiosPtr
   -- get current termios
   ptrffi termiosPtr (c_tcgetattr fd)
+  printptr "tcgetatt" termiosPtr
   -- copy termios to rawTerminal.prev_ios
   copyStruct rawTerminal.prev_ios termiosPtr
+  printptr "copy" rawTerminal
   -- set termios to raw
   ptrffi termiosPtr c_cfmakeraw
   -- set stdout to raw
   ptrffi termiosPtr (tcsetattr fd)
   -- free temp termios
   freeptr termiosPtr
+  At termSize <- newStructPtr "termSize" TermSize defaultTermSize
+  ptrffi termSize (c_ioctl fd TIOCGWINSZ)
+  printptr "TermSize" termSize
+  freeptr termSize
   -- restore stdout
   ptrffi (rawTerminal.prev_ios) (tcsetattr fd)
   freeptr rawTerminal

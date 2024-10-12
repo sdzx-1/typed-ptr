@@ -4,6 +4,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE QualifiedDo #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RequiredTypeArguments #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -15,6 +16,7 @@
 module TypedPtr.Core where
 
 import Data.IFunctor (At (..), IFunctor (..), IMonad (..), returnAt, type (~>))
+import qualified Data.IFunctor as I
 import Data.Kind
 import Data.Proxy
 import Data.Type.Map (Delete, Insert, InsertOverwriting, Lookup, (:->) (..))
@@ -205,6 +207,22 @@ copyStruct (ValPtrC destptr) (ValPtrC sourceptr) = LiftM $ do
       offset1 = fromIntegral (natVal (Proxy @offset1))
   copyBytes (destptr `plusPtr` offset) (sourceptr `plusPtr` offset1) (sizeOf @val undefined)
   pure (returnAt ())
+
+printptr
+  :: ( (hs ': syms) ~ SplitSymbol s
+     , CheckJust (Lookup hs dm) hs "Peek freed ptr: "
+     , ts ~ (FromStruct (FromJust (Lookup hs dm)))
+     , '(offset, val) ~ FieldIndex syms '(0, Struct ts)
+     , KnownNat offset
+     , Storable val
+     , Show val
+     )
+  => String
+  -> ValPtr s
+  -> MPtr (At () dm) dm
+printptr st vps = I.do
+  At val <- peekptr vps
+  liftm $ putStrLn (st ++ ": " ++ show val)
 
 runMPtr :: MPtr (At a dm') dm -> IO a
 runMPtr = \case
